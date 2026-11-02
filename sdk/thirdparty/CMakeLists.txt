@@ -68,10 +68,13 @@ if(REXGLUE_BUILD_TESTS)
 endif()
 
 foreach(submodule ${REQUIRED_SUBMODULES})
-    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${submodule}/.git")
+    # A normal checkout has .git; tools/fetch_thirdparty.py copies the sources
+    # without their git metadata and writes .rexglue-fetched instead.
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${submodule}/.git"
+       AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${submodule}/.rexglue-fetched")
         message(FATAL_ERROR
-            "Git submodule '${submodule}' is not initialized.\n"
-            "Please run: git submodule update --init --recursive\n"
+            "Third-party source '${submodule}' is not initialized.\n"
+            "Please run: python3 tools/fetch_thirdparty.py\n"
             "from the repository root directory."
         )
     endif()

@@ -39,6 +39,15 @@ def _remove_readonly(func, path, _exc):
     func(path)
 
 
+def _mark_fetched(target: Path) -> None:
+    """The SDK's CMake accepts this marker instead of submodule .git metadata."""
+    for child in target.iterdir():
+        if child.is_dir():
+            marker = child / ".rexglue-fetched"
+            if not marker.exists():
+                marker.write_text("fetched by tools/fetch_thirdparty.py\n", encoding="utf-8")
+
+
 def main() -> int:
     root = Path(__file__).resolve().parent.parent
     target = root / "sdk" / "thirdparty"
@@ -46,6 +55,7 @@ def main() -> int:
 
     # A quick completeness check. fmt and glslang are good canaries.
     if (target / "fmt").is_dir() and (target / "glslang").is_dir():
+        _mark_fetched(target)
         print(f"third-party tree already present in {target}")
         return 0
 
@@ -77,6 +87,7 @@ def main() -> int:
             shutil.copy2(src, dst)
             copied += 1
 
+        _mark_fetched(target)
         print(f"{copied} files copied into {target}, {kept} existing files kept")
         return 0
     finally:

@@ -6,7 +6,7 @@
 
 #if defined(_WIN32)
 #include <windows.h>
-#else
+#elif !defined(__SWITCH__)
 #include <sys/utsname.h>
 #endif
 #if defined(__ANDROID__)
@@ -62,7 +62,9 @@ uint32_t WindowsBuild() {
 
 std::string PlatformDescription() {
   std::string s;
-#if !defined(_WIN32)
+#if defined(__SWITCH__)
+  s = "Nintendo Switch (Horizon)";
+#elif !defined(_WIN32)
   // Android / Linux: the OS name, kernel release and (Android) API level.
   utsname u = {};
   s = uname(&u) == 0 ? std::string(u.sysname) + " " + u.release : "POSIX";

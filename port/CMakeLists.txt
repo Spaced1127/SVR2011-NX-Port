@@ -200,6 +200,10 @@ if(WIN32)
              third_party/ffx-fsr2/ffx_assert.cpp)
         set(SVR2011_FSR2 ON)
     endif()
+elseif(REXGLUE_PLATFORM_SWITCH)
+    # Horizon has no POSIX signals; the SDK's Switch exception handler and
+    # crash hooks own the fatal path. The game-side crash hooks are stubs.
+    list(APPEND SVR2011_SOURCES src/posix_stubs.cpp src/switch_stubs.cpp)
 else()
     list(APPEND SVR2011_SOURCES src/posix_stubs.cpp src/crash_report_posix.cpp)
 endif()
@@ -296,7 +300,7 @@ rexglue_setup_target(svr2011 GPU_PLUGINS xenos)
 # The SDK stages the GPU plugin (loaded at run time, never linked) only when
 # the exe relinks: a change to the plugin alone would leave a stale copy
 # beside the exe (and in Game Files / the release). Stage it on every build.
-if(TARGET rexgpu-xenos AND NOT ANDROID)
+if(TARGET rexgpu-xenos AND NOT ANDROID AND NOT REXGLUE_PLATFORM_SWITCH)
     add_custom_target(svr2011_stage_gpu_plugin ALL
         COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:rexgpu-xenos> $<TARGET_FILE_DIR:svr2011>
         DEPENDS rexgpu-xenos svr2011
@@ -324,6 +328,14 @@ if(WIN32 OR ANDROID)
     # the launcher's Bink reader and writer.
     target_sources(svr2011 PRIVATE launcher/bink_decode.c launcher/bink_encode.c)
     target_include_directories(svr2011 PRIVATE launcher)
+endif()
+if(REXGLUE_PLATFORM_SWITCH)
+    # The SDK's Switch target already links rexruntime, the GPU plugin,
+    # rex::nvk and the libnx startup objects. The NRO is packaged here.
+    rexglue_switch_add_nro(svr2011
+        NAME "WWE SmackDown vs. Raw 2011"
+        AUTHOR "SVR2011-NX"
+        VERSION "${SVR2011_PORT_VERSION}")
 endif()
 if(WIN32)
     target_link_libraries(svr2011 PRIVATE xaudio2 ole32 winmm d3d12 d3d11 dxgi dxguid dbghelp ws2_32 iphlpapi winhttp

@@ -53,6 +53,8 @@ if [[ ! -f "${PREFIX}/lib/libexpat.a" ]]; then
     | tar -xz -C "${WORK}"
   (
     cd "${WORK}/expat-${EXPAT_VERSION}"
+    CC="${CROSS}gcc" CXX="${CROSS}g++" AR="${CROSS}ar" RANLIB="${CROSS}ranlib" \
+    CFLAGS="-O2 -fPIC" CXXFLAGS="-O2 -fPIC" \
     ./configure \
       --host=aarch64-none-elf \
       --build="$(gcc -dumpmachine)" \
