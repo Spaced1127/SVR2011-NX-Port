@@ -1,0 +1,108 @@
+# ---------------------------------------------------------------------------
+# SVR2011-NX - keep game material and generated artifacts out of git
+# ---------------------------------------------------------------------------
+
+# Game data / user installs
+*.iso
+*.xex
+*.pac
+*.bik
+*.ymk
+*.ymb
+*.pck
+*.dds
+*.apk
+*.nro
+*.nsp
+*.xci
+*.exe
+*.dll
+*.so
+*.a
+*.lib
+*.obj
+*.o
+*.pdb
+*.elf
+*.zip
+*.7z
+*.rar
+*.mp3
+*.mp4
+*.wav
+*.flac
+*.ogg
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.gif
+*.webp
+*.svg
+*.ttf
+*.otf
+*.ico
+*.bin
+
+# Generated recompiled game code / shader packs
+/port/generated/
+/port/native_shaders/
+/port/assets/default.xex
+/port/assets/*.ico
+/port/runs/
+/port/out/
+/port/dist/
+/port/Saves/
+/port/UserData/
+/port/Music/
+/port/Custom Movies/
+/port/Mods/
+/port/DLC/
+/port/Texture Packs/
+/port/Texture Dumps/
+/port/SaveBackups/
+/port/UtilityDrive/
+
+# Build trees
+/out/
+/build/
+/cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+*.ninja
+compile_commands.json
+.ninja_deps
+.ninja_log
+
+# The fetched upstream third-party tree. Only the files this port changed are
+# tracked; tools/fetch_thirdparty.py fills the rest for local builds.
+/sdk/thirdparty/*
+!/sdk/thirdparty/CMakeLists.txt
+!/sdk/thirdparty/ffmpeg-overlay/
+!/sdk/thirdparty/FFmpeg/
+/sdk/thirdparty/FFmpeg/*
+!/sdk/thirdparty/FFmpeg/config.h
+!/sdk/thirdparty/FFmpeg/config_switch_aarch64.h
+!/sdk/thirdparty/FFmpeg/config_nfsmw_wmv3.h
+!/sdk/thirdparty/FFmpeg/config_masseffect_wmv3.h
+!/sdk/thirdparty/FFmpeg/libavcodec/
+/sdk/thirdparty/FFmpeg/libavcodec/*
+!/sdk/thirdparty/FFmpeg/libavcodec/fft_template.c
+!/sdk/thirdparty/FFmpeg/libavcodec/mdct_template.c
+
+# Local toolchains / SDKs / portlibs
+/third_party/portlibs/
+/third_party/mesa-switch/
+/third_party/nvk/
+/toolchains/
+/.devkitpro/
+
+# Logs, caches, editor files
+*.log
+logs/
+.cache/
+.vs/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
