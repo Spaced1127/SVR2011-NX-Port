@@ -389,13 +389,22 @@ bool FileCrc32(const fs::path& file, uint32_t* out) { return FileCrc(file, false
 std::vector<MissingGameFile> MissingGameFiles() {
   std::vector<MissingGameFile> out;
   const char* test = std::getenv("SVR2011_TEST_MISSING_GAME_FILE");
+  std::string test_path;
+  if (test) {
+    test_path = test;
+    std::replace(test_path.begin(), test_path.end(), '\\', '/');
+  }
   std::error_code ec;
   for (const GameFile& g : kFiles) {
     const std::wstring p = g.path;
     if (Optional(p)) continue;
     std::string u;
     for (wchar_t c : p) u += char(c);  // (the list's names are ASCII)
-    if (fs::exists(g_game_root / fs::path(p), ec) && !(test && u == test)) continue;
+    // The disc list uses Windows separators. On Horizon `\` is a literal
+    // filename character, so `pac\foo` never matched; only the root files
+    // (no separator) were found.
+    std::replace(u.begin(), u.end(), '\\', '/');
+    if (fs::exists(g_game_root / fs::path(u), ec) && !(test && u == test_path)) continue;
     const bool essential = p == L"default.xex" || p.rfind(L"plist360", 0) == 0 || p.rfind(L"pac\\", 0) == 0;
     out.push_back({u, essential});
   }
