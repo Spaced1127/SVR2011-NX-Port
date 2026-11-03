@@ -350,6 +350,16 @@ u32 MmAllocatePhysicalMemoryEx_entry(u32 flags, u32 region_size, u32 protect_bit
                        "flags={:#x} size={:#x} protect={:#x} min={:#x} max={:#x} align={:#x}",
                        (uint32_t)flags, (uint32_t)region_size, (uint32_t)protect_bits,
                        (uint32_t)min_addr_range, (uint32_t)max_addr_range, (uint32_t)alignment);
+  // [svr2011] The game reserves the console's physical memory in very large
+  // blocks; log those so a failed reservation names its size and flags.
+  const bool large_allocation = region_size >= (64u << 20);
+  if (large_allocation) {
+    REXKRNL_WARN(
+        "MmAllocatePhysicalMemoryEx: size={:#x} flags={:#x} protect={:#x} "
+        "min={:#x} max={:#x} align={:#x}",
+        (uint32_t)region_size, (uint32_t)flags, (uint32_t)protect_bits,
+        (uint32_t)min_addr_range, (uint32_t)max_addr_range, (uint32_t)alignment);
+  }
 
   // Check protection bits.
   if (!(protect_bits & (X_PAGE_READONLY | X_PAGE_READWRITE))) {
@@ -399,8 +409,18 @@ u32 MmAllocatePhysicalMemoryEx_entry(u32 flags, u32 region_size, u32 protect_bit
   uint32_t base_address;
   if (!heap->AllocRange(heap_min_addr, heap_max_addr, adjusted_size, adjusted_alignment,
                         allocation_type, protect, top_down, &base_address)) {
+    if (large_allocation) {
+      REXKRNL_WARN("MmAllocatePhysicalMemoryEx FAILED: size={:#x} flags={:#x} "
+                   "protect={:#x} min={:#x} max={:#x} align={:#x}",
+                   (uint32_t)region_size, (uint32_t)flags, (uint32_t)protect_bits,
+                   (uint32_t)min_addr_range, (uint32_t)max_addr_range, (uint32_t)alignment);
+    }
     // Failed - assume no memory available.
     return 0;
+  }
+  if (large_allocation) {
+    REXKRNL_WARN("MmAllocatePhysicalMemoryEx -> {:#x}: size={:#x} flags={:#x}",
+                 base_address, (uint32_t)region_size, (uint32_t)flags);
   }
   REXKRNL_IMPORT_RESULT("MmAllocatePhysicalMemoryEx", "addr={:#x}", base_address);
 
