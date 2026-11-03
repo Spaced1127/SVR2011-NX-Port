@@ -130,14 +130,33 @@ bool VulkanSharedMemory::Initialize() {
     }
     VkMemoryRequirements buffer_memory_requirements;
     dfn.vkGetBufferMemoryRequirements(device, buffer_, &buffer_memory_requirements);
+    // [svr2011] On a unified-memory Tegra (NVK) the buffer may only be
+    // compatible with host-visible memory, with no DEVICE_LOCAL bit at all.
+    // Use device-local first, then host-visible, then any allowed type.
+    const uint32_t allowed_memory_types = buffer_memory_requirements.memoryTypeBits;
     if (!rex::bit_scan_forward(
-            buffer_memory_requirements.memoryTypeBits & vulkan_device->memory_types().device_local,
+            allowed_memory_types & vulkan_device->memory_types().device_local,
             &buffer_memory_type_)) {
-      REXGPU_ERROR(
-          "Shared memory: Failed to get a device-local Vulkan memory type for "
-          "the buffer");
-      Shutdown();
-      return false;
+      if (rex::bit_scan_forward(
+              allowed_memory_types & vulkan_device->memory_types().host_visible,
+              &buffer_memory_type_)) {
+        REXGPU_INFO(
+            "Shared memory: no device-local Vulkan memory type for the {} MB "
+            "buffer; using host-visible memory (unified memory)",
+            kBufferSize >> 20);
+      } else if (rex::bit_scan_forward(allowed_memory_types, &buffer_memory_type_)) {
+        REXGPU_INFO(
+            "Shared memory: no device-local or host-visible Vulkan memory type "
+            "for the {} MB buffer; using the first allowed type",
+            kBufferSize >> 20);
+      } else {
+        REXGPU_ERROR(
+            "Shared memory: no Vulkan memory type is compatible with the {} MB "
+            "buffer",
+            kBufferSize >> 20);
+        Shutdown();
+        return false;
+      }
     }
     VkMemoryAllocateInfo buffer_memory_allocate_info;
     VkMemoryAllocateInfo* buffer_memory_allocate_info_last = &buffer_memory_allocate_info;
