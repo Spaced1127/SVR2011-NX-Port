@@ -46,8 +46,14 @@ $repo = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 # Refuse to stage game data inside the source repository: the release guard
 # would not catch an untracked folder, and it is too easy to commit by accident.
 $outFull = [System.IO.Path]::GetFullPath($OutDir)
-if ($outFull.StartsWith($repo, [System.StringComparison]::OrdinalIgnoreCase)) {
+$repoPrefix = $repo.TrimEnd('\') + '\'
+$outRoot = [System.IO.Path]::GetPathRoot($outFull).TrimEnd('\')
+if ($outFull.TrimEnd('\') -eq $repo -or
+    $outFull.StartsWith($repoPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
     Fail "OutDir must be outside the repository ($repo); got $outFull"
+}
+if ($outFull.TrimEnd('\') -eq $outRoot) {
+    Fail "OutDir must be a folder, not a drive root: $outFull"
 }
 
 $required = @(
