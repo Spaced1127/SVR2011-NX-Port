@@ -61,7 +61,8 @@ PC produces the NRO from their own game folder. See
 | Boot to the main menu | Not yet |
 | Match, audio, input, saves | Not yet |
 | Performance pass (30 fps target) | Not yet |
-| Installer / release packaging | Not yet |
+| Folder-based Windows builder | Done (`Build SVR2011-NX.cmd`) |
+| Source-only release packaging | Done (`tools/package_release.ps1`) |
 
 ---
 
