@@ -127,8 +127,7 @@ derivative work of your game; keep it out of git and do not distribute it.
 
 ## 8. Build the NRO
 
-Once the Switch target is wired into `port/CMakeLists.txt` (phase 3 of the
-plan), the command is:
+The Switch target is wired. The command is:
 
 ```sh
 tools/build_switch.sh --switch
@@ -143,12 +142,25 @@ cmake -S port -B out/switch -G Ninja \
   -DREXSDK_DIR="$PWD/sdk" \
   -DPLUME_DIR="$PWD/third_party/plume" \
   -DREXGLUE_SWITCH_NVK_SDK="$REXGLUE_SWITCH_NVK_SDK" \
-  -DREXGLUE_PLATFORM_SWITCH=ON
+  -DREXGLUE_PLATFORM_SWITCH=ON \
+  -DREXGLUE_ENABLE_TRACY=OFF \
+  -DPLUME_PLATFORM_SWITCH=ON \
+  -DPLUME_SWITCH_DEVKITPRO="$DEVKITPRO" \
+  -DPLUME_SWITCH_NVK_LIBRARY="$REXGLUE_SWITCH_NVK_SDK/lib/libvulkan.a" \
+  -DCMAKE_PREFIX_PATH="$DEVKITPRO/portlibs/switch"
 cmake --build out/switch -j"$(nproc)"
 ```
 
-The result is `svr2011.nro` (and the unstripped ELF) in the build folder. The
-NRO contains the recompiled game code; do not upload it.
+The result is `out/switch/svr2011.nro` (about 66 MB) and the unstripped
+`svr2011.elf`. The NRO contains the recompiled game code; do not upload it.
+
+The current local build uses the public prebuilt `nvk-switch` archive for the
+first link. The port adds `-Wl,--allow-multiple-definition` because that
+archive carries newlib gap fills (`getuid`) that the SDK supplement also
+defines. A release build should use a reproducible `mesa-switch` build; if it
+does not carry those gap fills, remove that link option.
+
+The NRO has not been run on hardware yet. See [TESTING.md](TESTING.md).
 
 ## 9. Prepare the SD card
 

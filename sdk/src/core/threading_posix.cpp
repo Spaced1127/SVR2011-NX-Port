@@ -285,10 +285,43 @@ static sem_t* RexCreateAnonymousSemaphore() {
 }
 #endif  // __APPLE__
 
+// [svr2011] WaitMultiple used to poll its handles (try-lock them all, check,
+// yield or sleep 1 ms, repeat): two threads waiting on the same objects kept
+// each other's try-locks failing and both spun a core (on a phone the audio
+// worker and the game's audio thread took ~1.8 cores). Now every signal of
+// any condition bumps a generation counter, and a multi-wait sleeps until it
+// changes (or its timeout; a 50 ms tick guards against a missed signal).
+namespace multi_wait {
+inline std::mutex& Mutex() {
+  static std::mutex m;
+  return m;
+}
+inline std::condition_variable& Cond() {
+  static std::condition_variable c;
+  return c;
+}
+inline std::atomic<uint64_t>& Generation() {
+  static std::atomic<uint64_t> g{0};
+  return g;
+}
+inline std::atomic<int>& Waiters() {
+  static std::atomic<int> w{0};
+  return w;
+}
+// After a condition's state changed (under its own mutex or not).
+inline void Notify() {
+  Generation().fetch_add(1, std::memory_order_seq_cst);
+  if (Waiters().load(std::memory_order_seq_cst) > 0) {
+    std::lock_guard<std::mutex> lock(Mutex());
+    Cond().notify_all();
+  }
+}
+}  // namespace multi_wait
+
 class PosixConditionBase {
  public:
   PosixConditionBase() {
-#if REX_PLATFORM_LINUX
+#if REX_PLATFORM_GNU_LINUX  // [svr2011] bionic: no robust mutexes
     // Use robust mutexes so waits can recover if owner thread terminates.
     pthread_mutexattr_t attr;
     if (pthread_mutexattr_init(&attr) == 0) {
@@ -515,6 +548,7 @@ class PosixCondition<Event> : public PosixConditionBase {
     auto lock = std::unique_lock<std::mutex>(mutex_);
     signal_ = true;
     cond_.notify_all();
+    multi_wait::Notify();
     return true;
   }
 
@@ -552,6 +586,7 @@ class PosixCondition<Semaphore> : public PosixConditionBase {
     }
     count_ += release_count;
     cond_.notify_all();
+    multi_wait::Notify();
     return true;
   }
 
@@ -560,6 +595,7 @@ class PosixCondition<Semaphore> : public PosixConditionBase {
   inline void post_execution() override {
     count_--;
     cond_.notify_all();
+    multi_wait::Notify();
   }
   uint32_t count_;
   const uint32_t maximum_count_;
@@ -584,6 +620,7 @@ class PosixCondition<Mutant> : public PosixConditionBase {
       // Free to be acquired by another thread
       if (count_ == 0) {
         cond_.notify_all();
+        multi_wait::Notify();
       }
       return true;
     }
@@ -616,6 +653,7 @@ class PosixCondition<Timer> : public PosixConditionBase {
     std::lock_guard<std::mutex> lock(mutex_);
     signal_ = true;
     cond_.notify_all();
+    multi_wait::Notify();
     return true;
   }
 
@@ -845,7 +883,7 @@ class PosixCondition<Thread> : public PosixConditionBase {
 #else
     cpu_set_t cpu_set;
 #if REX_PLATFORM_ANDROID
-    if (sched_getaffinity(pthread_gettid_np(thread_), sizeof(cpu_set_t), &cpu_set) != 0) {
+    if (sched_getaffinity(SystemTid(), sizeof(cpu_set_t), &cpu_set) != 0) {
       assert_always();
     }
 #else
@@ -878,7 +916,7 @@ class PosixCondition<Thread> : public PosixConditionBase {
       }
     }
 #if REX_PLATFORM_ANDROID
-    if (sched_setaffinity(pthread_gettid_np(thread_), sizeof(cpu_set_t), &cpu_set) != 0) {
+    if (sched_setaffinity(SystemTid(), sizeof(cpu_set_t), &cpu_set) != 0) {
       assert_always();
     }
 #else
@@ -956,8 +994,16 @@ class PosixCondition<Thread> : public PosixConditionBase {
     sigval value{};
     value.sival_ptr = this;
 #if REX_PLATFORM_ANDROID
-    int result = sigqueue(pthread_gettid_np(thread_),
-                          GetSystemSignal(SignalType::kThreadUserCallback), value);
+    // [svr2011] To this thread, by the id it recorded: pthread_gettid_np aborts
+    // the app on a thread that has exited (closing a game whose threads hang),
+    // and sigqueue(tid) signals the whole process - any thread may take it. The
+    // signal is only a wakeup (the handler ignores the value): tgkill.
+    (void)value;
+    const pid_t tid = tid_.load(std::memory_order_acquire);
+    int result = tid > 0 ? int(syscall(SYS_tgkill, getpid(), tid,
+                                       GetSystemSignal(SignalType::kThreadUserCallback)))
+                         : 0;
+    if (result != 0 && errno == ESRCH) result = 0;  // (exited meanwhile: nothing to wake)
 #else
     int result = pthread_sigqueue(thread_, GetSystemSignal(SignalType::kThreadUserCallback), value);
 #endif
@@ -1081,6 +1127,7 @@ class PosixCondition<Thread> : public PosixConditionBase {
       exit_code_ = exit_code;
       signaled_ = true;
       cond_.notify_all();
+      multi_wait::Notify();
     }
     if (is_current_thread) {
       pthread_exit(reinterpret_cast<void*>(exit_code));
@@ -1111,6 +1158,18 @@ class PosixCondition<Thread> : public PosixConditionBase {
   }
 
   void* native_handle() const override { return reinterpret_cast<void*>(thread_); }
+
+  // [svr2011] The kernel's id for the thread, recorded by the thread itself
+  // (0 before it starts and once it has finished: never a stale handle).
+  std::atomic<pid_t> tid_{0};
+  pid_t SystemTid() const {
+#if REX_PLATFORM_ANDROID || REX_PLATFORM_SWITCH
+    const pid_t tid = tid_.load(std::memory_order_acquire);
+    return tid > 0 ? tid : -1;  // (-1: the call fails with ESRCH instead of aborting)
+#else
+    return pthread_gettid_np(thread_);
+#endif
+  }
 
  private:
   static void* ThreadStartRoutine(void* parameter);
@@ -1522,6 +1581,11 @@ void* PosixCondition<Thread>::ThreadStartRoutine(void* parameter) {
 
   current_thread_ = thread;
   current_thread_condition_ = &thread->handle_;
+#if REX_PLATFORM_SWITCH
+  thread->handle_.tid_.store(pid_t(RexSwitchCurrentThreadId()), std::memory_order_release);
+#else
+  thread->handle_.tid_.store(pid_t(syscall(SYS_gettid)), std::memory_order_release);
+#endif
   {
     std::unique_lock<std::mutex> lock(thread->handle_.state_mutex_);
     thread->handle_.state_ = create_suspended ? State::kSuspended : State::kRunning;
@@ -1544,6 +1608,7 @@ void* PosixCondition<Thread>::ThreadStartRoutine(void* parameter) {
 
   start_routine();
 
+  thread->handle_.tid_.store(0, std::memory_order_release);
   {
     std::unique_lock<std::mutex> lock(thread->handle_.state_mutex_);
     thread->handle_.state_ = State::kFinished;
@@ -1554,6 +1619,7 @@ void* PosixCondition<Thread>::ThreadStartRoutine(void* parameter) {
     thread->handle_.exit_code_ = 0;
     thread->handle_.signaled_ = true;
     thread->handle_.cond_.notify_all();
+    multi_wait::Notify();
   }
 
   current_thread_ = nullptr;

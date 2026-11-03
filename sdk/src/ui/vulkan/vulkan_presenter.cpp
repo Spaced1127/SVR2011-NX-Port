@@ -61,6 +61,23 @@ extern "C" {
 REXCVAR_DEFINE_BOOL(present_render_pass_clear, true, "UI/Presenter",
                     "Clear render pass during presentation");
 
+// [svr2011] defined in presenter.cpp (rexruntime), used by the present-mode choice
+REXCVAR_DECLARE(bool, vsync);
+REXCVAR_DECLARE(bool, vsync_vrr);
+
+REXCVAR_DEFINE_STRING(vulkan_throttle_ui_paints, "auto", "GPU",
+                      "Paint only for new game frames, not at the display's rate for the overlay: auto, on, off");
+REXCVAR_DEFINE_STRING(vulkan_present_wait, "auto", "GPU",
+                      "Wait for each paint's GPU work before presenting: auto, on, off");
+
+bool rex::ui::vulkan::VulkanPresenter::ThrottleUIOnlyPaints() const {
+  const std::string mode = REXCVAR_GET(vulkan_throttle_ui_paints);
+  if (mode == "on") return true;
+  if (mode == "off") return false;
+  // One present per game frame is the right default on the Switch too.
+  return true;
+}
+
 // On NVK for Horizon, the acquire semaphore as a wait for the paint becomes a wait inside the GPU
 // channel (GPFIFO), which stalls everything behind it until the compositor releases the buffer. With
 // this, acquisition uses a fence that is waited on the CPU, without the queue lock, and the paint
@@ -1824,7 +1841,21 @@ VkSwapchainKHR VulkanPresenter::PaintContext::CreateSwapchainForVulkanSurface(
   // interfering with GPU command processing, and also to allow tearing so
   // variable refresh rate may be used where it's available.
   // Note: If the priorities here are changes, update the cvar descriptions.
-  if (REXCVAR_GET(vulkan_allow_present_mode_immediate) &&
+  // [svr2011] VSync on (the vsync setting): never tearing - mailbox (the
+  // newest image at each refresh, presents don't wait) where the driver has
+  // it, else FIFO (every driver has it; each image waits for the refresh,
+  // which paced frames 16 / 33 ms where mailbox exists).
+  // [svr2011] vsync_vrr (default): FIFO - each image for the next refresh,
+  // which variable refresh monitors follow; off: mailbox where there is one.
+  const bool vsync = REXCVAR_GET(vsync);
+  if (vsync) {
+    swapchain_create_info.presentMode =
+        !REXCVAR_GET(vsync_vrr) &&
+                std::find(present_modes.cbegin(), present_modes.cend(), VK_PRESENT_MODE_MAILBOX_KHR) !=
+                    present_modes.cend()
+            ? VK_PRESENT_MODE_MAILBOX_KHR
+            : VK_PRESENT_MODE_FIFO_KHR;
+  } else if (REXCVAR_GET(vulkan_allow_present_mode_immediate) &&
       std::find(present_modes.cbegin(), present_modes.cend(), VK_PRESENT_MODE_IMMEDIATE_KHR) !=
           present_modes.cend()) {
     // Allowing tearing to reduce latency, and possibly variable refresh rate

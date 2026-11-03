@@ -11,7 +11,9 @@
  */
 
 #include <atomic>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 #include <rex/input/device_assignment.h>
@@ -48,6 +50,15 @@ class InputSystem : public system::IInputSystem {
   X_RESULT SetState(uint32_t user_index, X_INPUT_VIBRATION* vibration);
   X_RESULT GetKeystroke(uint32_t user_index, uint32_t flags, X_INPUT_KEYSTROKE* out_keystroke);
 
+  /// [svr2011] While `hold` returns true the guest sees its pads connected but
+  /// idle (no buttons, centred sticks, no keystrokes) - for a host menu that
+  /// takes the controller. The real state the guest would have seen is kept
+  /// and returned by HeldState.
+  void SetGuestInputHold(std::function<bool()> hold);
+  /// [svr2011] The last real state polled for `user_index` while held
+  /// (false if none yet).
+  bool HeldState(uint32_t user_index, X_INPUT_STATE* out_state);
+
  private:
   /// Re-enumerates every driver and notifies the assignment when the set
   /// changed.
@@ -71,6 +82,12 @@ class InputSystem : public system::IInputSystem {
   // to be called on every GetState, SetState and GetCapabilities from the game (several per frame),
   // allocating memory and querying every driver each time. See RefreshDevices.
   std::atomic<int64_t> ultimo_refresco_ns_{0};
+
+  // [svr2011] The host menu holds the pad; the last real state is kept for it.
+  std::function<bool()> guest_input_hold_;
+  std::mutex held_mutex_;
+  X_INPUT_STATE held_state_[kMaxGuestUsers] = {};
+  bool held_valid_[kMaxGuestUsers] = {};
 };
 
 /// Create a default InputSystem with SDL + NOP drivers.

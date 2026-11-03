@@ -14,6 +14,14 @@ void InstallUserMusic(const std::filesystem::path&) {
 }
 std::filesystem::path UserMusicFolder() { return {}; }
 std::filesystem::path UserMusicSong(const std::string&) { return {}; }
+std::vector<std::filesystem::path> UserMusicSongs() { return {}; }
+void SetSongGain(const std::filesystem::path&, float) {}
+void PlayClip(const std::filesystem::path&, float) {}
+int HostSoundStart(const std::filesystem::path&, bool, float) { return -1; }
+void HostSoundStop(int) {}
+void HostSoundPause(int, bool) {}
+void HostSoundVolume(int, float) {}
+bool HostSoundActive(int) { return false; }
 #endif
 
 }  // namespace svr2011

@@ -7,7 +7,9 @@
 // loop handles them once it runs.
 #pragma once
 
+#if !defined(__SWITCH__)
 #include <SDL3/SDL_events.h>
+#endif
 
 #include <chrono>
 #include <thread>
@@ -29,7 +31,9 @@ inline void KeepWindowAlive() {
   const auto now = clock::now();
   if (now - last < std::chrono::milliseconds(100)) return;
   last = now;
+#if !defined(__SWITCH__)
   SDL_PumpEvents();
+#endif
 }
 
 }  // namespace svr2011

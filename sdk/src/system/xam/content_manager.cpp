@@ -61,6 +61,10 @@ static const char* kGameContentHeaderDirName = "Headers";
 
 static int content_device_id_ = 0;
 
+// [svr2011] The app observes content mounts (DLC / saves in the game folder).
+static ContentMountHook g_mount_hook = nullptr;
+void SetContentMountHook(ContentMountHook hook) { g_mount_hook = hook; }
+
 namespace {
 
 // A folder name the SD accepts, derived from the one the player sees.
@@ -209,12 +213,17 @@ ContentPackage::ContentPackage(KernelState* kernel_state, const std::string_view
   device->Initialize();
   fs->RegisterDevice(std::move(device));
   fs->RegisterSymbolicLink(root_name_ + ":", device_path_);
+  if (g_mount_hook) g_mount_hook(root_name_, package_path_, true);  // [svr2011]
 }
 
 ContentPackage::~ContentPackage() {
   auto fs = kernel_state_->file_system();
+  if (g_mount_hook) g_mount_hook(root_name_, package_path_, false);  // [svr2011]
   fs->UnregisterSymbolicLink(root_name_ + ":");
   fs->UnregisterDevice(device_path_);
+  if (on_close_) {
+    on_close_();
+  }
 }
 
 void ContentPackage::LoadPackageLicenseMask(const std::filesystem::path header_path) {
@@ -266,6 +275,13 @@ std::filesystem::path ContentManager::ResolvePackagePath(uint64_t xuid,
     used_xuid = 0;
   }
 
+  // [svr2011] Flat saves: the package's folder is its mount folder unless the
+  // save is kept as a folder.
+  if (IsFlat(data.content_type)) {
+    auto flat = FlatPath(data.file_name());
+    return std::filesystem::is_directory(flat) ? flat : FlatMountPath(data.file_name());
+  }
+
   // Content path:
   // content_root/xuid/title_id/content_type/data_file_name/
   auto package_root = ResolvePackageRoot(used_xuid, data.content_type, data.title_id);
@@ -281,6 +297,10 @@ std::filesystem::path ContentManager::ResolvePackageHeaderPath(const std::string
 
   if (content_type == XContentType::kMarketplaceContent) {
     xuid = 0;
+  }
+
+  if (IsFlat(content_type)) {
+    return FlatInfoPath(std::string(file_name), ".header");
   }
 
   auto xuid_str = fmt::format("{:016X}", xuid);
@@ -305,10 +325,16 @@ std::vector<XCONTENT_AGGREGATE_DATA> ContentManager::ListContent(uint32_t device
 
   // Search path:
   // content_root/xuid/title_id/type_name/*
-  auto package_root = ResolvePackageRoot(xuid, content_type, title_id);
+  const bool flat = IsFlat(content_type);
+  auto package_root = flat ? flat_root_ : ResolvePackageRoot(xuid, content_type, title_id);
   auto file_infos = rex::filesystem::ListFiles(package_root);
   for (const auto& file_info : file_infos) {
-    if (file_info.type != rex::filesystem::FileInfo::Type::kDirectory) {
+    if (flat) {
+      // [svr2011] Flat saves: files (and folders), not the hidden ones.
+      if (rex::path_to_utf8(file_info.name).starts_with(".")) {
+        continue;
+      }
+    } else if (file_info.type != rex::filesystem::FileInfo::Type::kDirectory) {
       // Directories only.
       continue;
     }
@@ -343,15 +369,27 @@ std::vector<XCONTENT_AGGREGATE_DATA> ContentManager::ListContent(uint32_t device
 
 std::unique_ptr<ContentPackage> ContentManager::ResolvePackage(
     const std::string_view root_name, uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data) {
+  const bool flat =
+      IsFlat(data.content_type) && !std::filesystem::is_directory(FlatPath(data.file_name()));
+  if (flat) {
+    PrepareFlatMount(data.file_name());
+  }
   auto package_path = ResolvePackagePath(xuid, data);
   if (!std::filesystem::exists(package_path)) {
     return nullptr;
   }
   auto package = std::make_unique<ContentPackage>(kernel_state_, root_name, data, package_path);
+  if (flat) {
+    package->set_on_close([this, name = data.file_name()] { CommitFlatMount(name); });
+  }
   return package;
 }
 
 bool ContentManager::ContentExists(uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data) {
+  if (IsFlat(data.content_type)) {
+    return std::filesystem::exists(FlatPath(data.file_name())) ||
+           std::filesystem::exists(FlatMountPath(data.file_name()));
+  }
   auto path = ResolvePackagePath(xuid, data);
   return std::filesystem::exists(path);
 }
@@ -522,7 +560,8 @@ X_RESULT ContentManager::GetContentThumbnail(uint64_t xuid, const XCONTENT_AGGRE
                                              std::vector<uint8_t>* buffer) {
   auto global_lock = global_critical_region_.Acquire();
   auto package_path = ResolvePackagePath(xuid, data);
-  auto thumb_path = package_path / kThumbnailFileName;
+  auto thumb_path = IsFlat(data.content_type) ? FlatInfoPath(data.file_name(), ".png")
+                                              : package_path / kThumbnailFileName;
   if (std::filesystem::exists(thumb_path)) {
     auto file = rex::filesystem::OpenFile(thumb_path, "rb");
     fseek(file, 0, SEEK_END);
@@ -541,9 +580,14 @@ X_RESULT ContentManager::SetContentThumbnail(uint64_t xuid, const XCONTENT_AGGRE
                                              std::vector<uint8_t> buffer) {
   auto global_lock = global_critical_region_.Acquire();
   auto package_path = ResolvePackagePath(xuid, data);
+  if (IsFlat(data.content_type)) {
+    // [svr2011] Not inside the package: it would make it a multi-file one.
+    package_path = flat_root_ / ".info";
+  }
   std::filesystem::create_directories(package_path);
   if (std::filesystem::exists(package_path)) {
-    auto thumb_path = package_path / kThumbnailFileName;
+    auto thumb_path = IsFlat(data.content_type) ? FlatInfoPath(data.file_name(), ".png")
+                                                : package_path / kThumbnailFileName;
     auto file = rex::filesystem::OpenFile(thumb_path, "wb");
     fwrite(buffer.data(), 1, buffer.size(), file);
     fclose(file);
@@ -559,6 +603,14 @@ X_RESULT ContentManager::DeleteContent(uint64_t xuid, const XCONTENT_AGGREGATE_D
   if (IsContentOpen(data)) {
     // TODO(Gliniak): Get real error code for this case.
     return X_ERROR_ACCESS_DENIED;
+  }
+
+  if (IsFlat(data.content_type)) {
+    if (!ContentExists(xuid, data)) {
+      return X_ERROR_FILE_NOT_FOUND;
+    }
+    DeleteFlat(data.file_name());
+    return X_ERROR_SUCCESS;
   }
 
   auto package_path = ResolvePackagePath(xuid, data);
@@ -608,6 +660,13 @@ X_RESULT ContentManager::UnmountAndDeleteContent(uint64_t xuid,
   delete package;
 
   // Delete phase: remove package directory and .header file
+  if (IsFlat(data.content_type)) {
+    if (!ContentExists(xuid, data)) {
+      return X_ERROR_FILE_NOT_FOUND;
+    }
+    DeleteFlat(data.file_name());
+    return X_ERROR_SUCCESS;
+  }
   auto package_path = ResolvePackagePath(xuid, data);
 
   uint64_t used_xuid = (data.xuid != uint64_t(-1) && data.xuid != 0) ? uint64_t(data.xuid) : xuid;
@@ -705,6 +764,163 @@ void ContentManager::CloseOpenedFilesFromContent(const std::string_view root_nam
       file->ReleaseHandle();
     }
   }
+}
+
+
+// [svr2011] Flat saves (see SetFlatSavesRoot in the header).
+namespace {
+constexpr const char* kFlatDefaultInner = "SaveData.Dat";
+
+void HideFolder(const std::filesystem::path& p) {
+#if defined(_WIN32)
+  DWORD attr = GetFileAttributesW(p.c_str());
+  if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_HIDDEN)) {
+    SetFileAttributesW(p.c_str(), attr | FILE_ATTRIBUTE_HIDDEN);
+  }
+#else
+  (void)p;
+#endif
+}
+
+// [svr2011] .info must travel with the saves: copy tools (Winpinator, ...)
+// skip hidden folders, and without the headers the game rejects the saves.
+void ShowFolder(const std::filesystem::path& p) {
+#if defined(_WIN32)
+  DWORD attr = GetFileAttributesW(p.c_str());
+  if (attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_HIDDEN)) {
+    SetFileAttributesW(p.c_str(), attr & ~DWORD(FILE_ATTRIBUTE_HIDDEN));
+  }
+#else
+  (void)p;
+#endif
+}
+
+std::string ReadSmallText(const std::filesystem::path& p) {
+  std::string text;
+  if (!std::filesystem::exists(p)) {
+    return text;
+  }
+  if (FILE* f = rex::filesystem::OpenFile(p, "rb")) {
+    char buf[256];
+    size_t n = fread(buf, 1, sizeof(buf), f);
+    fclose(f);
+    text.assign(buf, n);
+    while (!text.empty() && (text.back() == '\n' || text.back() == '\r' || text.back() == ' ')) {
+      text.pop_back();
+    }
+  }
+  return text;
+}
+}  // namespace
+
+void ContentManager::SetFlatSavesRoot(const std::filesystem::path& root) {
+  flat_root_ = root;
+  if (root.empty()) {
+    return;
+  }
+  std::error_code ec;
+  std::filesystem::create_directories(root / ".info", ec);
+  std::filesystem::create_directories(root / ".mount", ec);
+  ShowFolder(root / ".info");
+  HideFolder(root / ".mount");
+  // A session that ended with packages open: finish them.
+  std::vector<std::string> left;
+  for (const auto& entry : std::filesystem::directory_iterator(root / ".mount", ec)) {
+    if (entry.is_directory()) {
+      left.push_back(rex::path_to_utf8(entry.path().filename()));
+    }
+  }
+  for (const auto& name : left) {
+    CommitFlatMount(name);
+  }
+}
+
+void ContentManager::PrepareFlatMount(const std::string& name) {
+  const auto mount = FlatMountPath(name);
+  const auto file = FlatPath(name);
+  std::error_code ec;
+  if (std::filesystem::exists(mount)) {
+    CommitFlatMount(name);  // left over: finish it first
+  }
+  std::filesystem::create_directories(mount, ec);
+  if (!std::filesystem::is_regular_file(file)) {
+    return;
+  }
+  std::string inner = ReadSmallText(FlatInfoPath(name, ".file"));
+  if (inner.empty()) {
+    inner = kFlatDefaultInner;
+  }
+  const auto link = mount / rex::to_path(inner);
+  std::filesystem::create_hard_link(file, link, ec);
+  if (ec) {
+    // No hard links on this drive: work on a copy, moved back on close.
+    std::filesystem::copy_file(file, link, std::filesystem::copy_options::overwrite_existing, ec);
+  }
+}
+
+void ContentManager::CommitFlatMount(const std::string& name) {
+  const auto mount = FlatMountPath(name);
+  const auto file = FlatPath(name);
+  std::error_code ec;
+  if (!std::filesystem::is_directory(mount)) {
+    return;
+  }
+  std::vector<std::filesystem::path> files;
+  bool has_dirs = false;
+  for (const auto& entry : std::filesystem::directory_iterator(mount, ec)) {
+    if (entry.is_directory()) {
+      has_dirs = true;
+    } else {
+      files.push_back(entry.path());
+    }
+  }
+  if (files.size() == 1 && !has_dirs) {
+    const auto inner = files[0];
+    if (!(std::filesystem::exists(file) && std::filesystem::equivalent(inner, file, ec))) {
+      // A new file (or a copy): it becomes the save.
+      std::filesystem::rename(inner, file, ec);
+      if (ec) {
+        std::filesystem::copy_file(inner, file, std::filesystem::copy_options::overwrite_existing,
+                                   ec);
+        if (ec) {
+          REXSYS_WARN("Flat saves: could not store {} ({})", name, ec.message());
+          return;  // kept for the next start
+        }
+      }
+    }
+    const auto inner_name = rex::path_to_utf8(inner.filename());
+    const auto sidecar = FlatInfoPath(name, ".file");
+    if (inner_name == kFlatDefaultInner) {
+      std::filesystem::remove(sidecar, ec);
+    } else if (FILE* f = rex::filesystem::OpenFile(sidecar, "wb")) {
+      fwrite(inner_name.data(), 1, inner_name.size(), f);
+      fclose(f);
+    }
+    std::filesystem::remove_all(mount, ec);
+    return;
+  }
+  if (files.empty() && !has_dirs) {
+    // Nothing in it: the save is gone (or was never written).
+    std::filesystem::remove_all(mount, ec);
+    return;
+  }
+  // More than one file: kept as a folder.
+  if (std::filesystem::is_regular_file(file)) {
+    std::filesystem::remove(file, ec);  // its data is linked in the mount folder
+  }
+  std::filesystem::rename(mount, file, ec);
+  if (ec) {
+    REXSYS_WARN("Flat saves: could not store {} as a folder ({})", name, ec.message());
+  }
+}
+
+void ContentManager::DeleteFlat(const std::string& name) {
+  std::error_code ec;
+  std::filesystem::remove_all(FlatMountPath(name), ec);
+  std::filesystem::remove_all(FlatPath(name), ec);
+  std::filesystem::remove(FlatInfoPath(name, ".header"), ec);
+  std::filesystem::remove(FlatInfoPath(name, ".file"), ec);
+  std::filesystem::remove(FlatInfoPath(name, ".png"), ec);
 }
 
 static X_RESULT ExtractEntry(rex::filesystem::Entry* entry,

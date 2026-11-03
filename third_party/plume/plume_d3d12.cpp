@@ -45,8 +45,22 @@ extern "C" {
 
 namespace plume {
     static const uint32_t ShaderDescriptorHeapSize = 65536;
-    static const uint32_t SamplerDescriptorHeapSize = 1024;
+    static const uint32_t SamplerDescriptorHeapSize = 2048;  // [svr2011] (the D3D12 maximum)
     static const uint32_t TargetDescriptorHeapSize = 16384;
+
+    // [svr2011] FNV-1a over bytes, continuing from hash (pipeline library names).
+    static uint64_t HashBytes(const void *data, size_t size, uint64_t hash) {
+        if (hash == 0) {
+            hash = 14695981039346656037ull;
+        }
+
+        const uint8_t *bytes = (const uint8_t *)(data);
+        for (size_t i = 0; (bytes != nullptr) && (i < size); i++) {
+            hash = (hash ^ bytes[i]) * 1099511628211ull;
+        }
+
+        return hash;
+    }
 
     // Common functions.
 
@@ -144,7 +158,17 @@ namespace plume {
             // In order to be able to create both depth-stencil and shader resource views,
             // we must use R32G8X24_TYPELESS as the base type and specialize later.
             return DXGI_FORMAT_R32G8X24_TYPELESS;
-        case RenderFormat::D24_UNORM_S8_UINT:  // banjo-nx (2026-10-19): typeless, as above
+        // [svr2011]
+        case RenderFormat::R8G8B8A8_UNORM_SRGB:
+            return DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        case RenderFormat::R10G10B10A2_TYPELESS:
+            return DXGI_FORMAT_R10G10B10A2_TYPELESS;
+        case RenderFormat::R10G10B10A2_UNORM:
+            return DXGI_FORMAT_R10G10B10A2_UNORM;
+        case RenderFormat::R10G10B10A2_UINT:
+            return DXGI_FORMAT_R10G10B10A2_UINT;
+        case RenderFormat::D24_UNORM_S8_UINT:
+            // As D32_FLOAT_S8_UINT: typeless, specialized into depth-stencil and shader resource views.
             return DXGI_FORMAT_R24G8_TYPELESS;
         case RenderFormat::R32_FLOAT:
             return DXGI_FORMAT_R32_FLOAT;
@@ -245,6 +269,9 @@ namespace plume {
             // Specialize into depth view of depth-stencil texture.
             return DXGI_FORMAT_R32_FLOAT_X8X24_TYPELESS;
         }
+        if (dxgiFormat == DXGI_FORMAT_R24G8_TYPELESS) {  // [svr2011]
+            return DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+        }
         return dxgiFormat;
     }
 
@@ -253,6 +280,9 @@ namespace plume {
         if (dxgiFormat == DXGI_FORMAT_R32G8X24_TYPELESS) {
             // Specialize into full depth-stencil view.
             return DXGI_FORMAT_D32_FLOAT_S8X24_UINT;
+        }
+        if (dxgiFormat == DXGI_FORMAT_R24G8_TYPELESS) {  // [svr2011]
+            return DXGI_FORMAT_D24_UNORM_S8_UINT;
         }
         return dxgiFormat;
     }
@@ -458,6 +488,7 @@ namespace plume {
         case RenderDescriptorRangeType::READ_WRITE_BYTE_ADDRESS_BUFFER:
             return D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
         case RenderDescriptorRangeType::CONSTANT_BUFFER:
+        case RenderDescriptorRangeType::CONSTANT_BUFFER_DYNAMIC:
             return D3D12_DESCRIPTOR_RANGE_TYPE_CBV;
         case RenderDescriptorRangeType::SAMPLER:
             return D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
@@ -2249,6 +2280,14 @@ namespace plume {
 #   endif
     }
 
+    void D3D12CommandList::setStencilReference(uint32_t stencilReference) {  // [svr2011]
+        dynamicStencilRef = stencilReference;  // applied at the next draw (checkStencilRef)
+    }
+
+    void D3D12CommandList::setBlendFactor(const float blendFactor[4]) {  // [svr2011]
+        d3d->OMSetBlendFactor(blendFactor);
+    }
+
     void D3D12CommandList::clearColor(uint32_t attachmentIndex, RenderColor colorValue, const RenderRect *clearRects, uint32_t clearRectsCount) {
         assert(targetFramebuffer != nullptr);
         assert(attachmentIndex < targetFramebuffer->colorTargets.size());
@@ -2314,14 +2353,10 @@ namespace plume {
 
         const D3D12_TEXTURE_COPY_LOCATION copyDstLocation = toD3D12(dstLocation);
         const D3D12_TEXTURE_COPY_LOCATION copySrcLocation = toD3D12(srcLocation);
-        // banjo-nx (2026-10-17): a buffer destination (a texture read back) has no sample positions.
-        if (dstLocation.texture != nullptr) {
-            setSamplePositions(dstLocation.texture);
-        }
+        // [svr2011] (a buffer destination - a readback - has no texture)
+        if (dstLocation.texture != nullptr) setSamplePositions(dstLocation.texture);
         d3d->CopyTextureRegion(&copyDstLocation, dstX, dstY, dstZ, &copySrcLocation, (srcBox != nullptr) ? &copyBox : nullptr);
-        if (dstLocation.texture != nullptr) {
-            resetSamplePositions();
-        }
+        if (dstLocation.texture != nullptr) resetSamplePositions();
     }
 
     void D3D12CommandList::copyBuffer(const RenderBuffer *dstBuffer, const RenderBuffer *srcBuffer) {
@@ -2471,9 +2506,10 @@ namespace plume {
         assert(activeGraphicsPipeline->type == D3D12Pipeline::Type::Graphics);
 
         const D3D12GraphicsPipeline *graphicsPipeline = static_cast<const D3D12GraphicsPipeline *>(activeGraphicsPipeline);
-        if (activeStencilRef != graphicsPipeline->stencilRef) {
-            d3d->OMSetStencilRef(graphicsPipeline->stencilRef);
-            activeStencilRef = graphicsPipeline->stencilRef;
+        const uint32_t stencilRef = graphicsPipeline->dynamicStencilRef ? dynamicStencilRef : graphicsPipeline->stencilRef;
+        if (activeStencilRef != stencilRef) {
+            d3d->OMSetStencilRef(stencilRef);
+            activeStencilRef = stencilRef;
         }
     }
     
@@ -2724,6 +2760,13 @@ namespace plume {
         WaitForSingleObjectEx(interfaceFence->fenceEvent, INFINITE, FALSE);
     }
 
+    bool D3D12CommandQueue::waitForCommandFenceTimeout(RenderCommandFence *fence, uint32_t timeoutMs) {  // [svr2011]
+        assert(fence != nullptr);
+
+        D3D12CommandFence *interfaceFence = static_cast<D3D12CommandFence *>(fence);
+        return WaitForSingleObjectEx(interfaceFence->fenceEvent, timeoutMs, FALSE) == WAIT_OBJECT_0;
+    }
+
     // D3D12Buffer
 
     D3D12Buffer::D3D12Buffer(D3D12Device *device, D3D12Pool *pool, const RenderBufferDesc &desc) {
@@ -2879,7 +2922,8 @@ namespace plume {
 
         D3D12_CLEAR_VALUE optimizedClearValue;
         if (desc.optimizedClearValue != nullptr) {
-            optimizedClearValue.Format = toDXGI(desc.optimizedClearValue->format);
+            // [svr2011] a depth target's clear value is in its depth-stencil view format (not the typeless resource's)
+            optimizedClearValue.Format = (desc.flags & RenderTextureFlag::DEPTH_TARGET) ? toDXGIDepthStencilView(desc.optimizedClearValue->format) : toDXGI(desc.optimizedClearValue->format);
             memcpy(optimizedClearValue.Color, desc.optimizedClearValue->color.rgba, sizeof(optimizedClearValue.Color));
         }
 
@@ -3085,6 +3129,8 @@ namespace plume {
         assert(desc.pipelineLayout != nullptr);
 
         topology = toD3D12(desc.primitiveTopology);
+        stencilRef = desc.stencilReference;                     // [svr2011] (was never set)
+        dynamicStencilRef = desc.dynamicStencilReferenceEnabled;  // [svr2011]
 
         const D3D12PipelineLayout *pipelineLayout = static_cast<const D3D12PipelineLayout *>(desc.pipelineLayout);
         const D3D12Shader *vertexShader = static_cast<const D3D12Shader *>(desc.vertexShader);
@@ -3206,7 +3252,39 @@ namespace plume {
 
         psoDesc.InputLayout = { inputElements.data(), UINT(inputElements.size()) };
 
+        // [svr2011] From the pipeline library when it has this one (named by a
+        // hash of everything the description holds), else compiled and stored.
+        wchar_t libraryName[24] = {};
+        if (device->pipelineLibrary != nullptr) {
+            D3D12_GRAPHICS_PIPELINE_STATE_DESC plain = psoDesc;
+            plain.pRootSignature = nullptr;
+            plain.VS.pShaderBytecode = plain.GS.pShaderBytecode = plain.PS.pShaderBytecode = nullptr;
+            plain.InputLayout.pInputElementDescs = nullptr;
+            uint64_t hash = HashBytes(&plain, sizeof(plain), pipelineLayout->rootSignatureHash);
+            for (const D3D12_SHADER_BYTECODE &code : { psoDesc.VS, psoDesc.GS, psoDesc.PS }) {
+                hash = HashBytes(code.pShaderBytecode, code.BytecodeLength, hash);
+            }
+            for (D3D12_INPUT_ELEMENT_DESC element : inputElements) {
+                hash = HashBytes(element.SemanticName, strlen(element.SemanticName), hash);
+                element.SemanticName = nullptr;
+                hash = HashBytes(&element, sizeof(element), hash);
+            }
+            swprintf(libraryName, 24, L"%016llX", (unsigned long long)hash);
+            std::lock_guard<std::mutex> lock(device->pipelineLibraryMutex);
+            if (SUCCEEDED(device->pipelineLibrary->LoadGraphicsPipeline(libraryName, &psoDesc, IID_PPV_ARGS(&d3d)))) {
+                device->pipelineLibraryLoads++;
+                return;
+            }
+        }
+
         device->d3d->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&d3d));
+
+        if ((device->pipelineLibrary != nullptr) && (d3d != nullptr)) {
+            std::lock_guard<std::mutex> lock(device->pipelineLibraryMutex);
+            if (SUCCEEDED(device->pipelineLibrary->StorePipeline(libraryName, d3d))) {
+                device->pipelineLibraryStores++;
+            }
+        }
     }
 
     D3D12GraphicsPipeline::~D3D12GraphicsPipeline() {
@@ -3632,6 +3710,7 @@ namespace plume {
             return;
         }
 
+        rootSignatureHash = HashBytes(signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), 0);  // [svr2011]
         res = device->d3d->CreateRootSignature(0, signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(), IID_PPV_ARGS(&rootSignature));
         if (FAILED(res)) {
             fprintf(stderr, "CreateRootSignature failed with error code 0x%lX.\n", res);
@@ -3893,11 +3972,59 @@ namespace plume {
     }
 
     D3D12Device::~D3D12Device() {
+        if (pipelineLibrary != nullptr) {  // [svr2011]
+            pipelineLibrary->Release();
+            pipelineLibrary = nullptr;
+        }
+
         viewHeapAllocator.reset();
         samplerHeapAllocator.reset();
         rtDummyGlobalPipelineLayout.reset();
         rtDummyLocalPipelineLayout.reset();
         release();
+    }
+
+    // [svr2011] (see pipelineLibrary in plume_d3d12.h)
+    bool D3D12Device::setPipelineCacheData(const void *data, size_t size) {
+        std::lock_guard<std::mutex> lock(pipelineLibraryMutex);
+        if (pipelineLibrary != nullptr) {
+            pipelineLibrary->Release();
+            pipelineLibrary = nullptr;
+        }
+
+        ID3D12Device1 *device1 = nullptr;
+        if (FAILED(d3d->QueryInterface(IID_PPV_ARGS(&device1)))) {
+            return false;
+        }
+
+        bool loaded = false;
+        if ((data != nullptr) && (size > 0)) {
+            pipelineLibraryData.assign((const uint8_t *)(data), (const uint8_t *)(data) + size);
+            loaded = SUCCEEDED(device1->CreatePipelineLibrary(pipelineLibraryData.data(), pipelineLibraryData.size(), IID_PPV_ARGS(&pipelineLibrary)));
+        }
+
+        if (!loaded) {
+            // Missing, damaged or made by another driver / GPU: start an empty one.
+            pipelineLibraryData.clear();
+            pipelineLibrary = nullptr;
+            device1->CreatePipelineLibrary(nullptr, 0, IID_PPV_ARGS(&pipelineLibrary));
+        }
+
+        device1->Release();
+        return loaded;
+    }
+
+    std::vector<uint8_t> D3D12Device::getPipelineCacheData() {
+        std::lock_guard<std::mutex> lock(pipelineLibraryMutex);
+        std::vector<uint8_t> data;
+        if (pipelineLibrary != nullptr) {
+            data.resize(pipelineLibrary->GetSerializedSize());
+            if (data.empty() || FAILED(pipelineLibrary->Serialize(data.data(), data.size()))) {
+                data.clear();
+            }
+        }
+
+        return data;
     }
 
     std::unique_ptr<RenderDescriptorSet> D3D12Device::createDescriptorSet(const RenderDescriptorSetDesc &desc) {

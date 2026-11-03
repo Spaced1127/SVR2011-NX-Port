@@ -277,10 +277,30 @@ X_RESULT InputSystem::GetState(uint32_t user_index, X_INPUT_STATE* out_state) {
   if (!any) {
     return X_ERROR_DEVICE_NOT_CONNECTED;
   }
+  if (guest_input_hold_ && guest_input_hold_()) {  // [svr2011] a host menu has the pad
+    if (user_index < kMaxGuestUsers) {
+      std::lock_guard lock(held_mutex_);
+      held_state_[user_index] = merged;
+      held_valid_[user_index] = true;
+    }
+    merged.gamepad = {};
+  }
   if (out_state) {
     *out_state = merged;
   }
   return X_ERROR_SUCCESS;
+}
+
+void InputSystem::SetGuestInputHold(std::function<bool()> hold) {
+  guest_input_hold_ = std::move(hold);
+}
+
+bool InputSystem::HeldState(uint32_t user_index, X_INPUT_STATE* out_state) {
+  if (user_index >= kMaxGuestUsers) return false;
+  std::lock_guard lock(held_mutex_);
+  if (!held_valid_[user_index]) return false;
+  *out_state = held_state_[user_index];
+  return true;
 }
 
 X_RESULT InputSystem::SetState(uint32_t user_index, X_INPUT_VIBRATION* vibration) {
@@ -348,6 +368,9 @@ X_RESULT InputSystem::GetKeystroke(uint32_t user_index, uint32_t flags,
       continue;
     }
     X_RESULT result = driver->GetDeviceKeystroke(id, flags, out_keystroke);
+    if (result == X_ERROR_SUCCESS && guest_input_hold_ && guest_input_hold_()) {
+      return X_ERROR_EMPTY;  // [svr2011] a host menu has the pad: dropped
+    }
     if (result == X_ERROR_SUCCESS) {
       out_keystroke->user_index = static_cast<uint8_t>(user_index);
       return result;

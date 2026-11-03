@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstdarg>
 #include <cstdint>
 #include <string>
 #include <vector>

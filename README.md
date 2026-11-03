@@ -14,10 +14,11 @@ The port is based on the public
 by KaikoClanworth1 and contributors, and on the Horizon (Switch) layer of the
 public NFSMW-NX and SA2-NX ReXGlue ports.
 
-> **Status: foundation, not yet playable.** The repository currently holds
-> the source import, the Switch SDK layer, the build scaffolding and the
-> legal/release guardrails. See [docs/PORTING_PLAN.md](docs/PORTING_PLAN.md)
-> for the milestone list and the current state.
+> **Status: first buildable NRO, not yet playable.** The source now builds a
+> 66 MB `svr2011.nro` for Switch with devkitA64 + NVK. It has not been run on
+> hardware yet; the next milestone is the first boot test. See
+> [docs/PORTING_PLAN.md](docs/PORTING_PLAN.md) and
+> [docs/TESTING.md](docs/TESTING.md).
 
 ---
 
@@ -43,10 +44,11 @@ prebuilt NRO. See [docs/LEGAL.md](docs/LEGAL.md).
 |---|---|
 | Source import from the PC port (MIT) | Done |
 | Horizon (Switch) ReXGlue SDK layer | Imported (BSD-3-Clause) |
-| Build scaffolding and third-party fetch | In progress |
-| Host code generator (`rexglue`) from the user's `default.xex` | In progress |
-| Switch NRO target | Not wired yet |
-| Mesa/NVK + Vulkan presentation | Not wired yet |
+| Build scaffolding and third-party fetch | Done |
+| Host code generator (`rexglue`) from the user's `default.xex` | Done (403 generated files) |
+| Switch portlibs + NVK + Vulkan build | Done (compiles) |
+| Switch NRO target | **Builds** (66 MB `svr2011.nro`); hardware test pending |
+| Mesa/NVK + Vulkan presentation | Wired and compiled; hardware test pending |
 | Boot to the main menu | Not yet |
 | Match, audio, input, saves | Not yet |
 | Performance pass (30 fps target) | Not yet |

@@ -184,6 +184,10 @@ class VulkanDevice {
 
     bool nullDescriptor = false;
 
+    // [svr2011] What an app renderer drawing on this device needs
+    // (rex/external_frame.h): descriptor indexing with update after bind.
+    bool appRendererFeatures = false;
+
     // VK_EXT_extended_dynamic_state3 (#456). Only what the NFSMW native renderer uses (dynamic blend
     // enable, blend equation and color write mask).
 

@@ -12,61 +12,6 @@
 #include "plume_render_interface_types.h"
 
 namespace plume {
-#if defined(__SWITCH__)
-    struct SwitchFrameGenerationConfig {
-        bool enabled = false;
-        std::string shaderPath;
-        std::string pipelineCachePath;
-        float flowScale = 0.25f;
-        bool performanceMode = true;
-    };
-
-    void ConfigureSwitchFrameGeneration(const SwitchFrameGenerationConfig &config);
-
-    // The size swap chains are made at from now on (0 x 0: the NWindow's own size). An NWindow cannot change size
-    // while a swap chain has buffers on it, so a new size goes through needsResize() and resize(), after which the
-    // WSI sets the NWindow to it. For the docked and handheld window sizes.
-    void SetSwitchSwapChainSize(uint32_t width, uint32_t height);
-
-    // Called once, on the thread that saw it, when a queue submission, fence wait, query read, present or acquire
-    // returns VK_ERROR_DEVICE_LOST (the GPU channel was lost). `call` names the Vulkan function.
-    void SetSwitchDeviceLostCallback(void (*callback)(const char *call));
-
-    // Error messages of the driver, from any thread, through a VK_EXT_debug_utils messenger. A release Mesa drops
-    // them without one, among them the reason a GPU channel was lost.
-    void SetSwitchDriverMessageCallback(void (*callback)(const char *message));
-
-    // SwitchPipelineCacheSaveOnMiss: RenderDevice::savePipelineCache writes nothing, without even asking the driver
-    // for the cache's data, when no pipeline creation missed the cache since the last save (each creation reports
-    // whether it hit through VK_EXT_pipeline_creation_feedback). Set before the device is created.
-    void SetSwitchPipelineCacheSaveOnMiss(bool enabled);
-#endif
-
-    // Persistent VkPipelineCache for the Vulkan backend. Must be called before the device is
-    // created. The file is ignored when buildTag, the driver version or the pipeline cache UUID
-    // differ from the ones it was written with. An empty path disables the cache.
-    void ConfigureVulkanPipelineCache(const std::string &path, const std::string &buildTag);
-
-    // Also load a file written under this key (the full key of its header), which the application knows to be
-    // from the same driver; it is saved under the current key afterwards. 0 accepts none.
-    void ConfigureVulkanPipelineCacheLegacyKey(uint64_t key);
-
-    // Barrier access masks derived from each image's old and new layout (and each buffer's declared
-    // accesses) instead of MEMORY_READ | MEMORY_WRITE on both sides. Stage masks are unchanged. Drivers
-    // such as NVK turn the maximal masks into cache flushes and invalidations on every barrier.
-    // Off by default; can be switched at any time.
-    void SetVulkanPreciseBarriers(bool enabled);
-
-    // banjo-nx (2026-10-17): graphics pipelines created from now on get VK_EXT_pipeline_robustness with buffer and
-    // image robustness disabled (vertex input as the device has it), where the device has the extension: the device
-    // enables robustBufferAccess and robustness2 whenever the driver offers them, and NVK then clamps every descriptor
-    // index of a texture handle (two instructions each). For a renderer whose indices are in range by construction.
-    // Off by default.
-    void SetVulkanPipelineRobustnessOff(bool enabled);
-    // Whether the device has VK_EXT_pipeline_robustness (after the device is created).
-    struct RenderDevice;
-    bool VulkanPipelineRobustnessAvailable(const RenderDevice *device);
-
     // Interfaces.
 
     struct RenderBufferFormattedView {
@@ -182,11 +127,10 @@ namespace plume {
         virtual void setGraphicsPipelineLayout(const RenderPipelineLayout *pipelineLayout) = 0;
         virtual void setGraphicsPushConstants(uint32_t rangeIndex, const void *data, uint32_t offset = 0, uint32_t size = 0) = 0;
         virtual void setGraphicsDescriptorSet(RenderDescriptorSet *descriptorSet, uint32_t setIndex) = 0;
-        // Binds a set that contains CONSTANT_BUFFER_DYNAMIC descriptors. Offsets are given in
-        // binding order. Only implemented by the Vulkan backend.
-        virtual void setGraphicsDescriptorSetDynamic(RenderDescriptorSet *descriptorSet, uint32_t setIndex, const uint32_t *dynamicOffsets, uint32_t dynamicOffsetsCount) {
-            (void)descriptorSet; (void)setIndex; (void)dynamicOffsets; (void)dynamicOffsetsCount;
-            assert(false && "Dynamic descriptor offsets are not supported by this backend.");
+        // [svr2011] A set with CONSTANT_BUFFER_DYNAMIC ranges, with their offsets (Vulkan).
+        virtual void setGraphicsDescriptorSetDynamic(RenderDescriptorSet *descriptorSet, uint32_t setIndex,
+                                                     const uint32_t *dynamicOffsets, uint32_t dynamicOffsetCount) {
+            setGraphicsDescriptorSet(descriptorSet, setIndex);
         }
         virtual void setGraphicsRootDescriptor(RenderBufferReference bufferReference, uint32_t rootDescriptorIndex) = 0;
         virtual void setRaytracingPipelineLayout(const RenderPipelineLayout *pipelineLayout) = 0;
@@ -198,8 +142,9 @@ namespace plume {
         virtual void setScissors(const RenderRect *scissorRects, uint32_t count) = 0;
         virtual void setFramebuffer(const RenderFramebuffer *framebuffer) = 0;
         virtual void setDepthBias(float depthBias, float depthBiasClamp, float slopeScaledDepthBias) = 0;
-        // For pipelines created with dynamicStencilReferenceEnabled (set it after binding such a pipeline).
-        virtual void setStencilReference(uint32_t reference) { }
+        // [svr2011] For pipelines created with dynamicStencilReferenceEnabled / dynamicBlendFactorEnabled.
+        virtual void setStencilReference(uint32_t stencilReference) = 0;
+        virtual void setBlendFactor(const float blendFactor[4]) = 0;
         virtual void clearColor(uint32_t attachmentIndex = 0, RenderColor colorValue = RenderColor(), const RenderRect *clearRects = nullptr, uint32_t clearRectsCount = 0) = 0;
         virtual void clearDepthStencil(bool clearDepth = true, bool clearStencil = true, float depthValue = 1.0f, uint32_t stencilValue = 0, const RenderRect *clearRects = nullptr, uint32_t clearRectsCount = 0) = 0;
         virtual void copyBufferRegion(RenderBufferReference dstBuffer, RenderBufferReference srcBuffer, uint64_t size) = 0;
@@ -266,6 +211,8 @@ namespace plume {
         virtual std::unique_ptr<RenderSwapChain> createSwapChain(const RenderSwapChainDesc &desc) = 0;
         virtual void executeCommandLists(const RenderCommandList **commandLists, uint32_t commandListCount, RenderCommandSemaphore **waitSemaphores = nullptr, uint32_t waitSemaphoreCount = 0, RenderCommandSemaphore **signalSemaphores = nullptr, uint32_t signalSemaphoreCount = 0, RenderCommandFence *signalFence = nullptr) = 0;
         virtual void waitForCommandFence(RenderCommandFence *fence) = 0;
+        // [svr2011] False if the fence isn't signaled within timeoutMs (it can be waited for again).
+        virtual bool waitForCommandFenceTimeout(RenderCommandFence *fence, uint32_t timeoutMs) = 0;
 
         // Concrete implementation shortcuts.
         inline void executeCommandLists(const RenderCommandList *commandList, RenderCommandFence *signalFence = nullptr) {
@@ -284,10 +231,6 @@ namespace plume {
         virtual void queryResults() = 0;
         virtual const uint64_t *getResults() const = 0;
         virtual uint32_t getCount() const = 0;
-        // banjo-nx (package 28b): the results of queries [0, count) only, which are all that were written; false when
-        // the backend reads the whole pool (queryResults()), whose every query must then have been written.
-        virtual bool queryResults(uint32_t count) { (void)count; queryResults(); return false; }
-        virtual bool partialResults() const { return false; }
     };
 
     struct RenderDevice {
@@ -316,9 +259,6 @@ namespace plume {
         virtual RenderSampleCounts getSampleCountsSupported(RenderFormat format) const = 0;
         virtual bool beginCapture() = 0;
         virtual bool endCapture() = 0;
-        // Writes the persistent pipeline cache configured with ConfigureVulkanPipelineCache().
-        // Thread-safe. Returns false when there is no cache, nothing new to write, or on error.
-        virtual bool savePipelineCache() { return false; }
     };
 
     struct RenderInterface {

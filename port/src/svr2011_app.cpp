@@ -398,7 +398,15 @@ void Svr2011App::OnConfigurePaths(rex::PathConfig& paths) {
   g_config_path = paths.config_path;
   // The settings a fresh install starts with, for this platform.
   std::string config = kDefaultConfig;
-#if defined(__ANDROID__)
+#if defined(__SWITCH__)
+  // The console: Vulkan, the libnx pad driver, the whole screen, and the Xbox
+  // 360's 720p render cost. The GRAPHICS page raises the scale later.
+  config.replace(config.find("input_backend = \"xinput\""), 24, "input_backend = \"switch\"");
+  config += "gpu_backend = \"vulkan\"\n";
+  config += "native_max_scale = 1\n";
+  config += "native_2x_msaa = false\n";
+  config.replace(config.find("fullscreen = false"), 18, "fullscreen = true");
+#elif defined(__ANDROID__)
   // The phone: Vulkan, SDL controllers, the whole screen, and the Xbox 360's
   // 720p render cost (at the screen's 1080p it rendered 3x, 30-45 fps; the
   // GRAPHICS page raises it).

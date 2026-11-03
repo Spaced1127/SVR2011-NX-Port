@@ -9,6 +9,7 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
+#include <memory>
 #include <algorithm>
 #include <cstring>
 #include <string>
@@ -30,9 +31,17 @@ REXCVAR_DEFINE_BOOL(vulkan_require_fragment_stores_and_atomics, true, "UI/Vulkan
                     "Deprecated and ignored for parity; fragmentStoresAndAtomics is always "
                     "required for Vulkan GPU emulation")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+// [svr2011] honoured again: Mali GPUs have no vertexPipelineStoresAndAtomics
+// (every driver), and memory export from vertex shaders has a compute path.
 REXCVAR_DEFINE_BOOL(vulkan_require_vertex_pipeline_stores_and_atomics, true, "UI/Vulkan",
-                    "Deprecated and ignored for parity; vertexPipelineStoresAndAtomics is always "
-                    "required for Vulkan GPU emulation")
+                    "Require vertexPipelineStoresAndAtomics for Vulkan GPU emulation (disable to "
+                    "allow the compute shader path for memory export from vertex shaders: Mali)")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
+// [svr2011] Test aid: the device reports what an Arm Mali GPU's driver lacks
+// (vulkan.gpuinfo.org reports, Mali-G57 to G925), so the Mali paths run on
+// another GPU. Not the formats (BC: the app's own switch).
+REXCVAR_DEFINE_BOOL(vulkan_simulate_mali, false, "UI/Vulkan",
+                    "Test: hide the features and extensions an Arm Mali GPU lacks")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 // Apple Silicon / MoltenVK does not expose geometryShader or fillModeNonSolid;
 // default both to false on macOS so the device can still be selected.
@@ -95,6 +104,20 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
 
   VkPhysicalDeviceFeatures supported_features = {};
   ifn.vkGetPhysicalDeviceFeatures(physical_device, &supported_features);
+  if (REXCVAR_GET(vulkan_simulate_mali)) {
+    // (all Mali drivers: no wireframe, vertex stage stores, clip / cull
+    // distances, fp64, sparse resources or BC; G57 / G68 / G78: no multi draw indirect)
+    supported_features.fillModeNonSolid = VK_FALSE;
+    supported_features.vertexPipelineStoresAndAtomics = VK_FALSE;
+    supported_features.shaderClipDistance = VK_FALSE;
+    supported_features.shaderCullDistance = VK_FALSE;
+    supported_features.shaderFloat64 = VK_FALSE;
+    supported_features.sparseBinding = VK_FALSE;
+    supported_features.textureCompressionBC = VK_FALSE;
+    supported_features.multiDrawIndirect = VK_FALSE;
+    REXLOG_WARN("Vulkan device '{}': simulating an Arm Mali GPU (vulkan_simulate_mali)",
+                properties.deviceName);
+  }
 
   if (with_gpu_emulation) {
     if (!supported_features.independentBlend) {
@@ -120,26 +143,30 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
           properties.deviceName);
       return nullptr;
     }
-    if (!supported_features.vertexPipelineStoresAndAtomics) {
+    // [svr2011] A device without these is used with the fallbacks instead of refused (the game issues no
+    // vertex shader stores; geometry shaders and line fill have their own paths): a Mali-G610 started without
+    // the launcher's Mali alpha mode (which turns these requirements off) closed at once - 2.1.2 report.
+    if (REXCVAR_GET(vulkan_require_vertex_pipeline_stores_and_atomics) &&
+        !supported_features.vertexPipelineStoresAndAtomics) {
       REXLOG_WARN(
-          "Vulkan device '{}' doesn't support vertexPipelineStoresAndAtomics, which "
-          "is required for Vulkan GPU emulation parity",
+          "Vulkan device '{}' doesn't support vertexPipelineStoresAndAtomics: "
+          "vulkan_require_vertex_pipeline_stores_and_atomics turned off (memory export goes through compute)",
           properties.deviceName);
-      return nullptr;
+      REXCVAR_SET(vulkan_require_vertex_pipeline_stores_and_atomics, false);
     }
     if (REXCVAR_GET(vulkan_require_geometry_shader) && !supported_features.geometryShader) {
       REXLOG_WARN(
-          "Vulkan device '{}' doesn't support geometryShader, but "
-          "vulkan_require_geometry_shader=true",
+          "Vulkan device '{}' doesn't support geometryShader: vulkan_require_geometry_shader turned off "
+          "(primitives converted / expanded without it)",
           properties.deviceName);
-      return nullptr;
+      REXCVAR_SET(vulkan_require_geometry_shader, false);
     }
     if (REXCVAR_GET(vulkan_require_fill_mode_non_solid) && !supported_features.fillModeNonSolid) {
       REXLOG_WARN(
-          "Vulkan device '{}' doesn't support fillModeNonSolid, but "
-          "vulkan_require_fill_mode_non_solid=true",
+          "Vulkan device '{}' doesn't support fillModeNonSolid: vulkan_require_fill_mode_non_solid turned off "
+          "(line / point fill drawn solid)",
           properties.deviceName);
-      return nullptr;
+      REXCVAR_SET(vulkan_require_fill_mode_non_solid, false);
     }
   }
 
@@ -214,6 +241,10 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
 
   bool ext_1_2_KHR_sampler_mirror_clamp_to_edge = false;
   bool ext_1_1_KHR_maintenance1 = false;
+  // [svr2011] the app renderer's bindless tables on Vulkan 1.0 / 1.1 devices
+  // (the phones' own Adreno 6xx / 7xx drivers, Turnip on an Adreno 610)
+  bool ext_1_2_EXT_descriptor_indexing = false;
+  bool ext_1_1_KHR_maintenance3 = false;
   bool ext_1_2_KHR_shader_float_controls = false;
   bool ext_EXT_fragment_shader_interlock = false;
   bool ext_1_3_EXT_shader_demote_to_helper_invocation = false;
@@ -245,6 +276,9 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
       XE_UI_VULKAN_STRUCT_EXTENSION(EXT_custom_border_color)
       // Required for true null descriptors in bindless texture bindings.
       XE_UI_VULKAN_STRUCT_EXTENSION(EXT_robustness2)
+      // [svr2011] #162 (needs #169).
+      XE_UI_VULKAN_LOCAL_PROMOTED_EXTENSION(EXT_descriptor_indexing, 1, 2)
+      XE_UI_VULKAN_LOCAL_PROMOTED_EXTENSION(KHR_maintenance3, 1, 1)
     }
     if (properties.apiVersion >= VK_MAKE_API_VERSION(0, 1, 1, 0)) {
       // #237.
@@ -256,6 +290,19 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
 #undef XE_UI_VULKAN_LOCAL_EXTENSION
 #undef XE_UI_VULKAN_STRUCT_PROMOTED_EXTENSION
 #undef XE_UI_VULKAN_LOCAL_PROMOTED_EXTENSION
+
+  // [svr2011] the app's optional ones (instance.h), where the driver has them
+  const std::vector<std::string> app_extensions = OptionalDeviceExtensions();
+  std::unique_ptr<bool[]> app_extension_enabled(new bool[app_extensions.size() + 1]());
+  for (size_t i = 0; i < app_extensions.size(); ++i) {
+    requested_extensions.emplace(app_extensions[i], &app_extension_enabled[i]);
+  }
+  const auto app_extension_on = [&](const std::string& name) {
+    for (size_t i = 0; i < app_extensions.size(); ++i) {
+      if (app_extensions[i] == name && app_extension_enabled[i]) return true;
+    }
+    return false;
+  };
 
   std::vector<const char*> enabled_extensions;
   {
@@ -280,6 +327,12 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
         const auto requested_extension_it =
             requested_extensions.find(supported_extension.extensionName);
         if (requested_extension_it == requested_extensions.cend()) {
+          continue;
+        }
+        // (no Mali driver has these)
+        if (REXCVAR_GET(vulkan_simulate_mali) &&
+            (requested_extension_it->first == "VK_EXT_shader_stencil_export" ||
+             requested_extension_it->first == "VK_EXT_fragment_shader_interlock")) {
           continue;
         }
         assert_not_null(requested_extension_it->second);
@@ -667,7 +720,10 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
       XE_UI_VULKAN_FEATURE_2(features_1_2, uniformBufferStandardLayout);
       XE_UI_VULKAN_FEATURE_2(features_1_2, scalarBlockLayout);
     }
-    if (REXCVAR_GET(vulkan_native_shader_features)) {
+    // [svr2011] The app-side native renderer draws on this device too, so it
+    // needs the descriptor-indexing features even when the experimental
+    // native-shader switch is off.
+    if (with_gpu_emulation || REXCVAR_GET(vulkan_native_shader_features)) {
       XE_UI_VULKAN_FEATURE(shaderInt64)
       XE_UI_VULKAN_FEATURE(shaderSampledImageArrayDynamicIndexing)
       // Fragments and vertices shaded per pass (pipeline statistics for the native
@@ -781,6 +837,13 @@ std::unique_ptr<VulkanDevice> VulkanDevice::CreateIfSupported(
 #undef XE_UI_VULKAN_PROPERTY_2
 #undef XE_UI_VULKAN_ENUM_PROPERTY_2
 #undef XE_UI_VULKAN_FEATURE_2
+
+  // [svr2011] The native renderer can use unbounded update-after-bind texture
+  // tables when the device has the descriptor-indexing features.
+  device->properties_.appRendererFeatures =
+      device->properties_.runtimeDescriptorArray &&
+      device->properties_.descriptorBindingPartiallyBound &&
+      device->properties_.descriptorBindingSampledImageUpdateAfterBind;
 
   // Create the device.
 

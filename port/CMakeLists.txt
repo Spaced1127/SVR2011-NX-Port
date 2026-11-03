@@ -12,6 +12,13 @@ project(svr2011 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(REXGLUE_PLATFORM_SWITCH)
+    # devkitA64's newlib hides POSIX names in strict C++ mode; the SDK and the
+    # port use strdup/posix_memalign/fileno and friends.
+    add_compile_definitions(_GNU_SOURCE=1 _POSIX_C_SOURCE=200809L _DEFAULT_SOURCE=1)
+    set(CMAKE_CXX_EXTENSIONS ON)
+endif()
+
 include(generated/rexglue.cmake)
 
 set(SVR2011_SOURCES
@@ -189,6 +196,12 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 set_source_files_properties(src/svr2011_app.cpp src/online_files.cpp src/match_record.cpp PROPERTIES COMPILE_DEFINITIONS
     "SVR2011_PORT_VERSION=\"${SVR2011_PORT_VERSION}\";SVR2011_BUILD_COMMIT=\"${SVR2011_BUILD_COMMIT}\"")
 
+if(REXGLUE_PLATFORM_SWITCH)
+    # Horizon has no dlfcn/signal-based guest-fault logger; switch_stubs.cpp
+    # provides the game-side hooks.
+    list(REMOVE_ITEM SVR2011_SOURCES src/guest_faults.cpp)
+endif()
+
 # Windows only: XAudio2 audio, crash reports, PC music (XAudio2 + Media
 # Foundation), the D3D12 renderer backend. Elsewhere posix_stubs.cpp.
 if(WIN32)
@@ -328,6 +341,14 @@ if(WIN32 OR ANDROID)
     # the launcher's Bink reader and writer.
     target_sources(svr2011 PRIVATE launcher/bink_decode.c launcher/bink_encode.c)
     target_include_directories(svr2011 PRIVATE launcher)
+elseif(REXGLUE_PLATFORM_SWITCH)
+    # ascii_fold.h (user movie names) and the Bink writer for HD movie
+    # preparation live with the launcher helpers.
+    target_sources(svr2011 PRIVATE launcher/bink_decode.c launcher/bink_encode.c)
+    target_include_directories(svr2011 PRIVATE launcher)
+    # The prebuilt NVK archive also carries newlib gap fills (getuid) that the
+    # SDK supplement defines; a source-built Mesa/NVK may not need this.
+    target_link_options(svr2011 PRIVATE -Wl,--allow-multiple-definition)
 endif()
 if(REXGLUE_PLATFORM_SWITCH)
     # The SDK's Switch target already links rexruntime, the GPU plugin,

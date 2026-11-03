@@ -25,7 +25,9 @@
 // before including <ucontext.h>.
 #define _XOPEN_SOURCE 700
 #endif
+#if !REX_PLATFORM_ANDROID  // [svr2011] bionic has no ucontext functions
 #include <ucontext.h>
+#endif
 #include <cstdint>
 #include <vector>
 #endif

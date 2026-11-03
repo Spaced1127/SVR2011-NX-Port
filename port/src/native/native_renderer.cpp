@@ -2932,7 +2932,7 @@ std::unique_ptr<plume::RenderPipeline> TakePrebuilt(uint64_t h) {
 void PrebuildPipelines(Renderer* r, std::vector<PipelineRecord> records) {
 #if defined(_WIN32)
   SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_LOWEST);
-#else
+#elif !defined(__SWITCH__)
   setpriority(PRIO_PROCESS, 0, 10);
 #endif
   rex::thread::set_current_thread_name("native pipelines");

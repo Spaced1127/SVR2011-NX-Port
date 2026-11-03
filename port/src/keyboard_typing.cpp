@@ -9,7 +9,9 @@
 #include <deque>
 #include <mutex>
 
+#if !defined(__SWITCH__)
 #include <SDL3/SDL_clipboard.h>
+#endif
 #include <fmt/format.h>
 #include <rex/hook.h>
 #include <rex/logging.h>
@@ -146,10 +148,14 @@ void PasteText(const char* text) {
 
 // Ctrl+V: the clipboard's text.
 void Paste() {
+#if defined(__SWITCH__)
+  return;  // (the Switch has no host clipboard bridge here; the game's keyboard still types)
+#else
   char* text = SDL_GetClipboardText();
   if (!text) return;
   PasteText(text);
   SDL_free(text);
+#endif
 }
 
 // The open field's text: the keyboard's editor (*(*(keyboard + 268) + 16),
@@ -168,10 +174,14 @@ std::string FieldText() {
 
 // Ctrl+C: the field's text to the clipboard.
 void Copy() {
+#if defined(__SWITCH__)
+  return;
+#else
   const std::string t = FieldText();
   if (t.empty()) return;
   SDL_SetClipboardText(t.c_str());
   REXLOG_INFO("[svr2011] keyboard: copied {} characters", t.size());
+#endif
 }
 
 // Ahead of the controller emulation (keyboard -> pad) and the overlays: while

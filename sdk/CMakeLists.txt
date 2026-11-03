@@ -37,9 +37,13 @@ endif()
 # Vulkan: Cross-platform, ON by default on Linux, OFF by default on Windows.
 if(WIN32)
     option(REXGLUE_USE_D3D12  "Enable D3D12 graphics backend" ON)
+    # [svr2011] Direct3D 11: GPUs / drivers without D3D12 or Vulkan (the app
+    # draws its frames itself; the guest GPU runs without emulated drawing).
+    option(REXGLUE_USE_D3D11  "Enable the D3D11 graphics backend (no emulated drawing)" ON)
     option(REXGLUE_USE_VULKAN "Enable Vulkan graphics backend" OFF)
 else()
     set(REXGLUE_USE_D3D12 OFF)
+    set(REXGLUE_USE_D3D11 OFF)
     option(REXGLUE_USE_VULKAN "Enable Vulkan graphics backend" ON)
 endif()
 
@@ -206,7 +210,8 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/rex_pch.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/rex_version.cmake)
 rex_resolve_version(REXGLUE_FULL_VERSION
     FLOOR_MAJOR ${PROJECT_VERSION_MAJOR}
-    FLOOR_MINOR ${PROJECT_VERSION_MINOR})
+    FLOOR_MINOR ${PROJECT_VERSION_MINOR}
+    SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")  # [svr2011] (the SDK's tags, not the title's)
 
 # Strip the -id trailer (if any) for the numeric-only version.
 string(REGEX REPLACE "-.*$" "" REXGLUE_NUMERIC_VERSION "${REXGLUE_FULL_VERSION}")

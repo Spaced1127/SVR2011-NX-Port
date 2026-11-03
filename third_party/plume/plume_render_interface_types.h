@@ -15,9 +15,7 @@
 #include <cfloat>
 #include <cstdint>
 
-#if defined(__SWITCH__)
-#include <switch.h>
-#elif defined(_WIN32)
+#if defined(_WIN32)
 #include <Windows.h>
 #elif defined(__ANDROID__)
 #include "android/native_window.h"
@@ -36,14 +34,14 @@
 #endif
 
 namespace plume {
-#if defined(__SWITCH__)
-    // Native libnx window used by VK_NN_vi_surface.
-    typedef NWindow* RenderWindow;
-#elif defined(_WIN32)
+#if defined(_WIN32)
     // Native HWND handle to the target window.
     typedef HWND RenderWindow;
 #elif defined(__ANDROID__)
     typedef ANativeWindow* RenderWindow;
+#elif defined(__SWITCH__)
+    // The app uses plume's existing-device path; no swapchain is created here.
+    typedef void* RenderWindow;
 #elif defined(PLUME_SDL_VULKAN_ENABLED)
     typedef SDL_Window *RenderWindow;
 #elif defined(__linux__)
@@ -165,9 +163,11 @@ namespace plume {
         BC7_TYPELESS,
         BC7_UNORM,
         BC7_UNORM_SRGB,
-        // Stencil only, 8 bits (Vulkan; UnleashedRecomp's Switch renderer uses it as a coverage mask).
-        S8_UINT,
-        // banjo-nx (2026-10-19): 24-bit unorm depth with 8-bit stencil, 4 bytes a pixel (deko3d Z24S8; the Xenos D24S8).
+        // [svr2011]
+        R8G8B8A8_UNORM_SRGB,
+        R10G10B10A2_TYPELESS,
+        R10G10B10A2_UNORM,
+        R10G10B10A2_UINT,
         D24_UNORM_S8_UINT,
         MAX
     };
@@ -355,9 +355,7 @@ namespace plume {
         BYTE_ADDRESS_BUFFER,
         READ_WRITE_BYTE_ADDRESS_BUFFER,
         ACCELERATION_STRUCTURE,
-        // Vulkan only: VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC. Bind the set with
-        // RenderCommandList::setGraphicsDescriptorSetDynamic().
-        CONSTANT_BUFFER_DYNAMIC
+        CONSTANT_BUFFER_DYNAMIC  // [svr2011] Vulkan: its offset given when the set is bound
     };
 
     enum class RenderRootDescriptorType {
@@ -385,8 +383,7 @@ namespace plume {
         DXIL,
         SPIRV,
         METAL,
-        // banjo-nx (2026-10-17): plume_deko3d's GLSL for uam (Deko3DShaderBlob), the Switch's deko3d back end.
-        DEKO3D
+        DXBC  // [svr2011] Direct3D 11 (Shader Model 4 / 5)
     };
 
     enum class RenderRaytracingPipelineLibrarySymbolType {
@@ -436,12 +433,7 @@ namespace plume {
             ACCELERATION_STRUCTURE_SCRATCH = 1U << 7,
             SHADER_BINDING_TABLE = 1U << 8,
             UNORDERED_ACCESS = 1U << 9,
-            DEVICE_ADDRESSABLE = 1U << 10,
-            // banjo-nx (2026-10-17), Vulkan: an UPLOAD buffer in CPU-cached memory (VMA's random-access host memory
-            // instead of write-combined). The CPU writes it at cache speed (the Switch's A57: about twice the
-            // write-combined rate); the application publishes what it wrote with unmap(0, &writtenRange) before the
-            // GPU reads it (a no-op on coherent memory). D3D12 ignores it.
-            HOST_CACHED = 1U << 11
+            DEVICE_ADDRESSABLE = 1U << 10
         };
     };
 
@@ -570,6 +562,10 @@ namespace plume {
         case RenderFormat::R32_FLOAT:
         case RenderFormat::R32_UINT:
         case RenderFormat::R32_SINT:
+        case RenderFormat::R8G8B8A8_UNORM_SRGB:
+        case RenderFormat::R10G10B10A2_TYPELESS:
+        case RenderFormat::R10G10B10A2_UNORM:
+        case RenderFormat::R10G10B10A2_UINT:
         case RenderFormat::D24_UNORM_S8_UINT:
             return 4;
         case RenderFormat::R8G8_TYPELESS:
@@ -590,7 +586,6 @@ namespace plume {
         case RenderFormat::R8_UINT:
         case RenderFormat::R8_SNORM:
         case RenderFormat::R8_SINT:
-        case RenderFormat::S8_UINT:
             return 1;
         case RenderFormat::BC1_UNORM:
         case RenderFormat::BC1_UNORM_SRGB:
@@ -653,7 +648,6 @@ namespace plume {
         case RenderFormat::R32_TYPELESS:
         case RenderFormat::D32_FLOAT:
         case RenderFormat::D32_FLOAT_S8_UINT:
-        case RenderFormat::D24_UNORM_S8_UINT:
         case RenderFormat::R32_FLOAT:
         case RenderFormat::R32_UINT:
         case RenderFormat::R32_SINT:
@@ -674,7 +668,11 @@ namespace plume {
         case RenderFormat::R8_UINT:
         case RenderFormat::R8_SNORM:
         case RenderFormat::R8_SINT:
-        case RenderFormat::S8_UINT:
+        case RenderFormat::R8G8B8A8_UNORM_SRGB:
+        case RenderFormat::R10G10B10A2_TYPELESS:
+        case RenderFormat::R10G10B10A2_UNORM:
+        case RenderFormat::R10G10B10A2_UINT:
+        case RenderFormat::D24_UNORM_S8_UINT:
             return 1;
         case RenderFormat::BC1_TYPELESS:
         case RenderFormat::BC1_UNORM:
@@ -717,8 +715,7 @@ namespace plume {
     }
 
     constexpr bool RenderFormatIsStencil(RenderFormat format) {
-        return format == RenderFormat::D32_FLOAT_S8_UINT || format == RenderFormat::D24_UNORM_S8_UINT ||
-               format == RenderFormat::S8_UINT;
+        return format == RenderFormat::D32_FLOAT_S8_UINT || format == RenderFormat::D24_UNORM_S8_UINT;
     }
 
     constexpr RenderTextureViewDimension RenderTextureDimensionToView(const RenderTextureDimension dimension) {
@@ -1305,8 +1302,9 @@ namespace plume {
         float depthBiasClamp = 0.0f;
         float slopeScaledDepthBias = 0.0f;
         bool dynamicDepthBiasEnabled = false;
-        // The stencil reference comes from RenderCommandList::setStencilReference (Vulkan).
+        // [svr2011] set with RenderCommandList::setStencilReference / setBlendFactor
         bool dynamicStencilReferenceEnabled = false;
+        bool dynamicBlendFactorEnabled = false;
         bool depthEnabled = false;
         bool depthWriteEnabled = false;
         bool stencilEnabled = false;

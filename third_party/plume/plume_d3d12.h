@@ -183,6 +183,7 @@ namespace plume {
         bool descriptorHeapsSet = false;
         D3D12_PRIMITIVE_TOPOLOGY activeTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
         uint32_t activeStencilRef = 0;
+        uint32_t dynamicStencilRef = 0;  // [svr2011]
         bool activeSamplePositions = false;
 
         D3D12CommandList(D3D12CommandQueue *queue);
@@ -211,6 +212,8 @@ namespace plume {
         void setScissors(const RenderRect *scissorRects, uint32_t count) override;
         void setFramebuffer(const RenderFramebuffer *framebuffer) override;
         void setDepthBias(float depthBias, float depthBiasClamp, float slopeScaledDepthBias) override;
+        void setStencilReference(uint32_t stencilReference) override;
+        void setBlendFactor(const float blendFactor[4]) override;
         void clearColor(uint32_t attachmentIndex, RenderColor colorValue, const RenderRect *clearRects, uint32_t clearRectsCount) override;
         void clearDepthStencil(bool clearDepth, bool clearStencil, float depthValue, uint32_t stencilValue, const RenderRect *clearRects, uint32_t clearRectsCount) override;
         void copyBufferRegion(RenderBufferReference dstBuffer, RenderBufferReference srcBuffer, uint64_t size) override;
@@ -266,6 +269,7 @@ namespace plume {
         std::unique_ptr<RenderSwapChain> createSwapChain(const RenderSwapChainDesc &desc) override;
         void executeCommandLists(const RenderCommandList **commandLists, uint32_t commandListCount, RenderCommandSemaphore **waitSemaphores, uint32_t waitSemaphoreCount, RenderCommandSemaphore **signalSemaphores, uint32_t signalSemaphoreCount, RenderCommandFence *signalFence) override;
         void waitForCommandFence(RenderCommandFence *fence) override;
+        bool waitForCommandFenceTimeout(RenderCommandFence *fence, uint32_t timeoutMs) override;
     };
 
     struct D3D12Buffer : RenderBuffer {
@@ -397,6 +401,7 @@ namespace plume {
         std::vector<RenderInputSlot> inputSlots;
         D3D12_PRIMITIVE_TOPOLOGY topology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
         uint32_t stencilRef = 0;
+        bool dynamicStencilRef = false;  // [svr2011]
 
         D3D12GraphicsPipeline(D3D12Device *device, const RenderGraphicsPipelineDesc &desc);
         ~D3D12GraphicsPipeline() override;
@@ -419,6 +424,7 @@ namespace plume {
 
     struct D3D12PipelineLayout : RenderPipelineLayout {
         ID3D12RootSignature *rootSignature = nullptr;
+        uint64_t rootSignatureHash = 0;  // [svr2011] of the serialized root signature (pipeline library names)
         D3D12Device *device = nullptr;
         std::vector<RenderPushConstantRange> pushConstantRanges;
         std::vector<uint32_t> setViewRootIndices;
@@ -448,6 +454,17 @@ namespace plume {
         RenderDeviceDescription description;
         uint64_t timestampFrequency = 1;
         bool gpuUploadHeapFallback = false;
+        // [svr2011] Compiled pipelines kept between runs (ID3D12PipelineLibrary):
+        // setPipelineCacheData loads a serialized library (or starts an empty
+        // one when it's missing or from another driver), pipelines are looked
+        // up / stored in it by a hash of their description, and
+        // getPipelineCacheData serializes it for the next run.
+        ID3D12PipelineLibrary *pipelineLibrary = nullptr;
+        std::vector<uint8_t> pipelineLibraryData;  // (the library reads from it while it lives)
+        std::mutex pipelineLibraryMutex;
+        uint32_t pipelineLibraryLoads = 0, pipelineLibraryStores = 0;
+        bool setPipelineCacheData(const void *data, size_t size);
+        std::vector<uint8_t> getPipelineCacheData();
 
         D3D12Device(D3D12Interface *renderInterface, const std::string &preferredDeviceName);
         ~D3D12Device() override;

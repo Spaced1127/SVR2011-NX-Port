@@ -173,6 +173,10 @@ target_compile_options(disasm PRIVATE -w)
 set(FMT_DOC OFF CACHE BOOL "" FORCE)
 set(FMT_TEST OFF CACHE BOOL "" FORCE)
 set(FMT_INSTALL ON CACHE BOOL "" FORCE)
+if(REXGLUE_PLATFORM_SWITCH)
+    # newlib has no fdopen/fileno declarations and fmt's OS layer is not needed.
+    set(FMT_OS OFF CACHE BOOL "" FORCE)
+endif()
 add_subdirectory(fmt)
 target_compile_options(fmt PRIVATE -w)
 
@@ -184,6 +188,11 @@ set(SPDLOG_BUILD_EXAMPLE OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_BENCH OFF CACHE BOOL "" FORCE)
 set(SPDLOG_INSTALL ON CACHE BOOL "" FORCE)
+if(REXGLUE_PLATFORM_SWITCH)
+    # newlib has no tm_gmtoff and does not declare fwrite_unlocked for C++.
+    set(SPDLOG_NO_TZ_OFFSET ON CACHE BOOL "" FORCE)
+    set(SPDLOG_FWRITE_UNLOCKED OFF CACHE BOOL "" FORCE)
+endif()
 add_subdirectory(spdlog)
 target_compile_options(spdlog PRIVATE -w)
 

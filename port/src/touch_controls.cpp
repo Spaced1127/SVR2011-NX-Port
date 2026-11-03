@@ -20,7 +20,9 @@
 #include <unordered_map>
 #include <vector>
 
+#if !defined(__SWITCH__)
 #include <SDL3/SDL.h>
+#endif
 #include <imgui.h>
 
 #include <rex/cvar.h>
@@ -480,7 +482,11 @@ bool Visible() {
   if (!REXCVAR_GET(touch_controls)) return false;
   // With a controller connected (any backend: XInput, SDL), hidden - only a
   // touch after it connected brings it back, for 15 s.
+#if defined(__SWITCH__)
+  if (g_controllers.load() > 0) {
+#else
   if (g_controllers.load() > 0 || SDL_HasGamepad()) {
+#endif
     const Clock::time_point since{Clock::duration(g_controller_since.load())};
     return g_last_touch > since && Clock::now() - g_last_touch < std::chrono::seconds(15);
   }

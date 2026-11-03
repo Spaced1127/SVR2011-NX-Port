@@ -38,8 +38,10 @@
 #include <windows.h>
 #else
 #include <sys/resource.h>
+#if !defined(__SWITCH__)
 #include <sys/syscall.h>
 #include <unistd.h>
+#endif
 #endif
 
 REXCVAR_DEFINE_STRING(native_texture_packs, "", "GPU",
@@ -92,7 +94,7 @@ constexpr uint32_t kMaxSide = 8192;
 void LowPriority() {
 #ifdef _WIN32
   SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_LOWEST);
-#else
+#elif !defined(__SWITCH__)
   setpriority(PRIO_PROCESS, static_cast<id_t>(syscall(SYS_gettid)), 10);
 #endif
 }

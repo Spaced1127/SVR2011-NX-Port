@@ -4,6 +4,14 @@ This is the working plan for the Switch port. Each phase has an acceptance
 check. The plan is deliberately incremental: get a buildable, legal skeleton
 first, then boot the game, then make it playable, then make it fast.
 
+## Current state
+
+The source builds a **66 MB `out/switch/svr2011.nro`** (ARM64, static-pie) with
+devkitA64, the Horizon ReXGlue layer, Mesa NVK and the native Vulkan renderer.
+The generated game code (403 files) compiles. The NRO has **not been run on
+hardware yet**; the next step is the first boot test described in
+[TESTING.md](TESTING.md).
+
 ## Phase 0 - repository and legal guardrails
 
 - [x] Import the MIT-licensed PC port source (`port/src`, patches, config).
@@ -20,14 +28,13 @@ checkout; no game data, generated code or shader packs are tracked.
 ## Phase 1 - host code generator
 
 - [x] Fetch the ReXGlue third-party tree with `tools/fetch_thirdparty.py`.
-- [ ] Build `rexglue` (host) from `sdk/`.
-- [ ] Run `rexglue codegen svr2011_manifest.toml` on the user's
+- [x] Build `rexglue` (host) from `sdk/`.
+- [x] Run `rexglue codegen svr2011_manifest.toml` on the user's
       `default.xex`.
-- [ ] Confirm the generated C++ contains the expected game entry points and
-      no build-time game assets.
+- [x] Confirm the generated C++ compiles for Switch (403 generated files).
 
-**Acceptance:** a clean host build produces `out/host/rexglue`, and codegen
-from the user's `default.xex` completes without missing symbols.
+**Acceptance:** a clean host build produces `sdk/out/linux-amd64/rexglue`,
+and codegen from the user's `default.xex` completes without missing symbols.
 
 ## Phase 2 - Switch SDK, portlibs and NVK
 
@@ -35,14 +42,16 @@ from the user's `default.xex` completes without missing symbols.
       `fiber_switch`, `exception_handler_switch`, `threading_switch`,
       `window_switch`, `surface_switch`, `switch_audio_system`,
       `switch_input_driver`, `rexglue_switch.cmake`).
-- [ ] Build zlib, expat and zstd for devkitA64.
-- [ ] Build Mesa/NVK (`libvulkan.a`) for Horizon.
-- [ ] Build a minimal NRO that opens a window and presents a Vulkan clear.
+- [x] Build zlib, expat and zstd for devkitA64.
+- [x] Provide Mesa/NVK (`libvulkan.a`) for Horizon (prebuilt for the first
+      link; release builds should use mesa-switch).
+- [x] Build the full `svr2011.nro` (66 MB) with the game code and native
+      Vulkan renderer.
 - [ ] Confirm the NRO launches with a title override/forwarder and exits
-      cleanly.
+      cleanly (first hardware test).
 
-**Acceptance:** a "hello triangle/clear" NRO runs on hardware, presents
-through `VK_NN_vi_surface`, and does not crash on exit.
+**Acceptance:** the NRO runs on hardware, presents through `VK_NN_vi_surface`,
+and does not crash on exit.
 
 ## Phase 3 - boot the game
 

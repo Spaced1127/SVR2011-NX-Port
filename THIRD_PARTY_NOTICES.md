@@ -12,10 +12,10 @@ is included in this repository.
 | [WWE SmackDown vs. Raw 2011 PC port](https://github.com/KaikoClanworth1/wwe-svr2011-pc) by KaikoClanworth1 and contributors | The game hooks, native renderer, tools and configuration this Switch port starts from | MIT (port's own code); third-party parts keep their own licences |
 | [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk) by Tom Clay, with portions from [Xenia](https://xenia.jp) | Code generator, Xbox 360 kernel/runtime, GPU command processing, XMA audio, virtual filesystem | BSD-3-Clause (`sdk/LICENSE`) |
 | Horizon (Switch) layer of the SDK by StevensND, from [NFSMW-NX](https://github.com/StevensND/nfsmw-nx) | Guest memory, exception handling, ARM64 fibers, threading, input, audio, presentation, clocks, NRO packaging | BSD-3-Clause (as part of the SDK) |
-| [plume](https://github.com/renderbag/plume) by renderbag and contributors, with the Switch/deko3d work from [SA2-NX](https://github.com/ChanseyIsTheBest/sa2-nx) | The native renderer's graphics interface | MIT (`third_party/plume/LICENSE`) |
+| [plume](https://github.com/renderbag/plume) by renderbag and contributors, at the commit the PC port pins, with the port's `plume-svr2011.patch` | The native renderer's graphics interface | MIT (`third_party/plume/LICENSE`) |
 | [Mesa](https://mesa3d.org) / [mesa-switch](https://github.com/danfromtico/mesa-switch) by danfromtico | NVK (Vulkan) and NAK (shader compiler) for the Tegra X1 | MIT (Mesa's per-file licences) |
-| [deko3d](https://github.com/devkitPro/deko3d) by fincs / devkitPro | Optional low-level Switch graphics backend | zlib |
-| [uam](https://github.com/devkitPro/uam) by fincs, with SwitchWakerHD's patches | Optional deko3d shader compiler | zlib (uam), MIT (Mesa files), MPL-2.0 (SwitchWakerHD's patches) |
+| [deko3d](https://github.com/devkitPro/deko3d) by fincs / devkitPro | Optional future low-level Switch graphics backend (not in the current Vulkan build) | zlib |
+| [uam](https://github.com/devkitPro/uam) by fincs, with SwitchWakerHD's patches | Optional future deko3d shader compiler (not in the current build) | zlib (uam), MIT (Mesa files), MPL-2.0 (SwitchWakerHD's patches) |
 | [XenosRecomp](https://github.com/hedge-dev/XenosRecomp) by hedge-dev and contributors | Xbox 360 shader microcode to HLSL translator | MIT |
 | [FFmpeg](https://ffmpeg.org) | XMA/WMA audio decoding and the Bink reader/writer | LGPL-2.1-or-later (configured without GPL parts) |
 | [libmspack](https://www.cabextract.org.uk/libmspack/) | LZX decompression | LGPL-2.1 |

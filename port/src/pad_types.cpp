@@ -10,7 +10,9 @@
 #include <mutex>
 #include <string>
 
+#if defined(_WIN32)
 #include <SDL3/SDL_hints.h>
+#endif
 #if defined(__ANDROID__)
 #include <set>
 
@@ -23,7 +25,9 @@
 #include "generated/default/svr2011_init.h"
 #include "fast_start.h"
 
+#if defined(_WIN32)
 #include <rex/input/sdl/sdl_input_driver.h>
+#endif
 #include <rex/cvar.h>
 #include <rex/hook.h>
 #include <rex/logging.h>
@@ -156,6 +160,7 @@ const char* TypeName(PadType t) {
 // The SDL driver for the PlayStation controllers next to XInput: SDL sees
 // only HIDAPI devices other than Xbox ones (no XInput, raw input, DirectInput,
 // WGI or GameInput), so no pad is seen twice.
+#if defined(_WIN32)
 class PlayStationDriver final : public rex::input::InputDriver {
  public:
   PlayStationDriver() : InputDriver(nullptr, 0), sdl_(nullptr, 0) {}
@@ -185,6 +190,7 @@ class PlayStationDriver final : public rex::input::InputDriver {
  private:
   rex::input::sdl::SDLInputDriver sdl_;
 };
+#endif  // _WIN32
 
 }  // namespace
 
@@ -401,7 +407,13 @@ void PlayerSlots::DevicesForUser(uint32_t user_index, std::vector<DeviceId>& out
   if (user_index < kMaxPlayers) out = users_[Slot(user_index)];
 }
 
-std::unique_ptr<rex::input::InputDriver> CreatePlayStationDriver() { return std::make_unique<PlayStationDriver>(); }
+std::unique_ptr<rex::input::InputDriver> CreatePlayStationDriver() {
+#if defined(_WIN32)
+  return std::make_unique<PlayStationDriver>();
+#else
+  return nullptr;
+#endif
+}
 
 }  // namespace svr2011
 

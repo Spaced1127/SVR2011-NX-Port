@@ -9,7 +9,10 @@
  * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
  */
 
+#include <chrono>
+#include <thread>
 #include <rex/graphics/graphics_system.h>
+#include <rex/timeline.h>
 
 #include <algorithm>
 #include <cctype>
@@ -31,10 +34,17 @@
 #include <rex/ui/window.h>
 #include <rex/ui/windowed_app_context.h>
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 REXCVAR_DEFINE_STRING(swap_post_effect, "none", "GPU", "Swap post effect: none, fxaa, fxaa_extreme")
     .allowed({"none", "fxaa", "fxaa_extreme"})
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
+// [svr2011] The guest's vblank rate (its frame clock), Hz; 0 = the video
+// mode's (vsync off: 1 kHz).
+REXCVAR_DEFINE_DOUBLE(guest_vblank_hz, 0.0, "GPU", "Guest vblank rate in Hz (0: the video mode's)");
 REXCVAR_DEFINE_BOOL(store_shaders, true, "GPU",
                     "Store shaders persistently and load them when loading games to avoid "
                     "runtime spikes and freezes when playing the game not for the first time.");
@@ -158,8 +168,56 @@ X_STATUS GraphicsSystem::SetupGuestGpu(runtime::FunctionDispatcher* function_dis
             std::max(uint64_t(1), uint64_t(double(guest_tick_frequency) / refresh_rate_hz));
         uint64_t no_vsync_interval_ticks = std::max(uint64_t(1), guest_tick_frequency / 1000);
         uint64_t last_frame_time = chrono::Clock::QueryGuestTickCount();
+#if defined(_WIN32)
+        // [svr2011] a high-resolution waitable timer (Windows 10 1803+): the
+        // wait for a vblank sleeps until 0.25 ms before it instead of
+        // yielding through its last 2 ms (~12% of a core at 60 Hz - a lot on a
+        // 2-core laptop). Without one: as before.
+        HANDLE timer = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
+                                              TIMER_ALL_ACCESS);
+#endif
         while (vsync_worker_running_) {
           uint64_t current_time = chrono::Clock::QueryGuestTickCount();
+          // [svr2011] guest_vblank_hz > 0: vblanks at that rate (read every
+          // tick, so it can change), whatever vsync says, timed precisely:
+          // 1 ms sleeps until just before the vblank, then short yields.
+          const double vblank_hz = REXCVAR_GET(guest_vblank_hz);
+          if (vblank_hz > 0) {
+            const uint64_t interval =
+                std::max(uint64_t(1), uint64_t(double(guest_tick_frequency) / vblank_hz));
+            if (current_time - last_frame_time > interval * 4) {
+              last_frame_time = current_time - interval;  // (fell far behind: no burst)
+            }
+            if (current_time - last_frame_time >= interval) {
+              MarkVblank();
+              last_frame_time += interval;
+              continue;
+            }
+            const uint64_t left = last_frame_time + interval - current_time;
+            const uint64_t tail = guest_tick_frequency / 4000;  // (0.25 ms: spun)
+#if defined(_WIN32)
+            if (timer && left > tail) {
+              LARGE_INTEGER due;
+              due.QuadPart = -int64_t(double(left - tail) * 1e7 / double(guest_tick_frequency));  // (100 ns, relative)
+              if (SetWaitableTimerEx(timer, &due, 0, nullptr, nullptr, nullptr, 0)) {
+                WaitForSingleObject(timer, 100);
+                continue;
+              }
+            }
+#else
+            if (left > tail) {
+              std::this_thread::sleep_for(std::chrono::nanoseconds(
+                  int64_t(double(left - tail) * 1e9 / double(guest_tick_frequency))));
+              continue;
+            }
+#endif
+            if (left > guest_tick_frequency / 500) {  // > 2 ms
+              rex::thread::Sleep(std::chrono::milliseconds(1));
+            } else {
+              rex::thread::MaybeYield();
+            }
+            continue;
+          }
           uint64_t interval_ticks =
               REXCVAR_GET(vsync) ? vsync_interval_ticks : no_vsync_interval_ticks;
           while (current_time - last_frame_time >= interval_ticks) {
@@ -168,6 +226,9 @@ X_STATUS GraphicsSystem::SetupGuestGpu(runtime::FunctionDispatcher* function_dis
           }
           rex::thread::Sleep(std::chrono::milliseconds(1));
         }
+#if defined(_WIN32)
+        if (timer) CloseHandle(timer);
+#endif
         return 0;
       }));
   // TODO: set_can_debugger_suspend not yet ported
@@ -217,6 +278,12 @@ void GraphicsSystem::OnHostGpuLossFromAnyThread([[maybe_unused]] bool is_respons
   if (host_gpu_loss_reported_.test_and_set(std::memory_order_relaxed)) {
     return;
   }
+  // [svr2011] Let the GPU thread log the device removal diagnostics (DRED
+  // page fault address, breadcrumbs) first - the UI thread usually sees the
+  // loss first, and FatalError ends the process.
+  REXLOG_ERROR("Graphics device lost - waiting for diagnostics");
+  std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+  rex::FlushLogging();
   rex::FatalError("Graphics device lost (probably due to an internal error)");
 }
 
@@ -312,8 +379,10 @@ void GraphicsSystem::DispatchInterruptCallback(uint32_t source, uint32_t cpu) {
   //          interrupt_callback_, source, cpu);
 
   uint64_t args[] = {source, interrupt_callback_data_};
+  REX_TIMELINE(kInterruptBegin, source, cpu);
   function_dispatcher_->ExecuteInterrupt(thread->thread_state(), interrupt_callback_, args,
                                          rex::countof(args));
+  REX_TIMELINE(kInterruptEnd, source, cpu);
 }
 
 void GraphicsSystem::MarkVblank() {
