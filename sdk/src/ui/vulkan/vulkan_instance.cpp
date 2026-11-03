@@ -39,8 +39,6 @@ REXCVAR_DEFINE_INT32(vulkan_debug_message_repeats, 5, "UI/Vulkan",
 // declared by hand.
 extern "C" {
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(VkInstance instance, const char* pName);
-VKAPI_ATTR void VKAPI_CALL vkDestroyInstance(VkInstance instance,
-                                             const VkAllocationCallbacks* pAllocator);
 }
 #endif  // REX_PLATFORM_SWITCH
 
@@ -131,7 +129,6 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(const bool with_surface,
   // dlopen in an NRO either. The entry functions are taken directly. Verified on
   // the console: vkCreateInstance called this way returns VK_SUCCESS on the GM20B.
   ifn.vkGetInstanceProcAddr = &::vkGetInstanceProcAddr;
-  ifn.vkDestroyInstance = &::vkDestroyInstance;
   loader_loaded = true;
 #else
   loader_loaded = vulkan_instance->loader_.Load(platform::lib_names::kVulkanLoader);
@@ -458,6 +455,18 @@ std::unique_ptr<VulkanInstance> VulkanInstance::Create(const bool with_surface,
                  vk::to_string(vk::Result(instance_create_result)));
     return nullptr;
   }
+
+#if REX_PLATFORM_SWITCH
+  // NVK exports only vkGetInstanceProcAddr. vkDestroyInstance is an
+  // instance-level function, so resolve it now that the instance exists;
+  // taking the address of a same-named global would land in Volk's BSS.
+  ifn.vkDestroyInstance = PFN_vkDestroyInstance(
+      ifn.vkGetInstanceProcAddr(vulkan_instance->instance_, "vkDestroyInstance"));
+  if (!ifn.vkDestroyInstance) {
+    REXLOG_ERROR("Failed to get vkDestroyInstance from NVK");
+    return nullptr;
+  }
+#endif
 
   // Load instance functions.
 

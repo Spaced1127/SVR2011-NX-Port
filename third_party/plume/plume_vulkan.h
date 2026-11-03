@@ -28,6 +28,13 @@
 // For VK_KHR_portability_subset
 #define VK_ENABLE_BETA_EXTENSIONS
 
+#if defined(__SWITCH__)
+// NVK is linked statically and exports the Vulkan entry points as functions.
+// Volk's globals of the same names would collide with them and take the
+// runtime's direct calls (the crash was a jump into Volk's BSS
+// vkGetInstanceProcAddr). Keep plume's Volk pointers under plume_* names.
+#include "plume_volk_names.h"
+#endif
 #include <volk.h>
 
 #ifdef __clang__

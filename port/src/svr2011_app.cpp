@@ -349,8 +349,11 @@ void CheckGameFilesThere() {
             L"then use Verify game files.";
     MessageBoxW(nullptr, text.c_str(), L"SvR 2011 - game files missing", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
   }
-  std::_Exit(3);
 #endif
+  // On every platform: do not continue into the game with missing essential
+  // files (on Switch that used to end in a guest-code crash instead of a
+  // readable error).
+  std::_Exit(3);
 }
 
 }  // namespace
