@@ -274,7 +274,7 @@ $userScript = Write-WslScript "setup-user.sh" ($common + @(
 $buildScript = Write-WslScript "build.sh" ($common + @(
     "export REXGLUE_SWITCH_NVK_SDK=$(BashQuote ($nvkWsl + "/extracted"))",
     "export SVR2011_XEX=$(BashQuote ($gameWsl + "/default.xex"))",
-    "bash tools/build_switch.sh --nro"
+    "bash tools/build_switch.sh --switch"
 ))
 
 $log = Join-Path $WorkDir "build.log"
