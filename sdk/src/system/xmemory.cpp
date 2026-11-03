@@ -10,6 +10,8 @@
  */
 
 #include <algorithm>
+#include <atomic>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <utility>
@@ -1558,7 +1560,28 @@ bool BaseHeap::AllocRange(uint32_t low_address, uint32_t high_address, uint32_t 
   }
   if (start_page_number == UINT_MAX || end_page_number == UINT_MAX) {
     // Out of memory.
-    REXSYS_ERROR("BaseHeap::Alloc failed to find contiguous range");
+    static std::atomic<uint32_t> allocation_failures{0};
+    const uint32_t failure = allocation_failures.fetch_add(1, std::memory_order_relaxed);
+    if (failure < 8) {
+      REXSYS_ERROR(
+          "BaseHeap::Alloc failed to find contiguous range: {} bytes ({} pages), "
+          "alignment {}, heap base 0x{:08X}, size 0x{:X}",
+          size, page_count, alignment, heap_base_, heap_size_);
+    } else if (failure == 8) {
+      REXSYS_ERROR("BaseHeap::Alloc: further allocation failures suppressed");
+    }
+#if REX_PLATFORM_SWITCH
+    // The guest game retries a failed allocation in a tight loop, which
+    // starves Horizon and makes the Home button unresponsive. Stop cleanly
+    // after a burst instead of freezing the console.
+    if (failure >= 100) {
+      REXSYS_ERROR(
+          "BaseHeap::Alloc: guest heap exhausted ({} failed allocations); "
+          "exiting instead of freezing",
+          failure + 1);
+      std::_Exit(4);
+    }
+#endif
     assert_always("Heap exhausted!");
     return false;
   }

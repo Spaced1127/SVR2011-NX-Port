@@ -196,7 +196,15 @@ uint32_t FallbackBlock(uint32_t size, bool cpu, uint32_t align) {
 }
 
 bool BigModelMemory() {
+#if defined(__SWITCH__)
+  // The guest has a 512 MB physical heap. 1600 pages per wrestler is meant
+  // for PCs with a large guest arena; on Switch it lets the model loader fill
+  // the heap and the game spins on failed allocations. Keep the game's own
+  // 192-page limit unless explicitly enabled for a test.
+  static const bool on = std::getenv("SVR2011_TEST_BIGMEM_ON") != nullptr;
+#else
   static const bool on = std::getenv("SVR2011_TEST_BIGMEM_OFF") == nullptr;
+#endif
   return on;
 }
 

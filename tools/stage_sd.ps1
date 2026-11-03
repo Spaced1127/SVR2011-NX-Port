@@ -91,6 +91,14 @@ resolution = "720p"
 resolution_scale = 1
 fullscreen = true
 vsync = true
+native_max_scale = 1
+native_2x_msaa = false
+native_prepare_pipelines = false
+native_texture_quality = "low"
+native_scale_effects = false
+depth_of_field = false
+motion_blur = false
+unlock_everything = false
 '@
 
 $copies = @(

@@ -409,6 +409,15 @@ void Svr2011App::OnConfigurePaths(rex::PathConfig& paths) {
   config += "gpu_backend = \"vulkan\"\n";
   config += "native_max_scale = 1\n";
   config += "native_2x_msaa = false\n";
+  // The 3.2 GB title-override budget also holds the 512 MB guest arena and the
+  // 512 MB Vulkan shared buffer. Start with the cheaper renderer settings; the
+  // GRAPHICS page can raise them once the game runs.
+  config += "native_prepare_pipelines = false\n";
+  config += "native_texture_quality = \"low\"\n";
+  config += "native_scale_effects = false\n";
+  config += "depth_of_field = false\n";
+  config += "motion_blur = false\n";
+  config += "unlock_everything = false\n";
   config.replace(config.find("fullscreen = false"), 18, "fullscreen = true");
 #elif defined(__ANDROID__)
   // The phone: Vulkan, SDL controllers, the whole screen, and the Xbox 360's
