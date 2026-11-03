@@ -59,6 +59,17 @@ foreach ($f in $requiredRoot) {
     }
 }
 
+# Windows is case-insensitive, so the checks below would accept Pac/Sound/
+# Movies. The game asks for lowercase names; print and flag the exact case.
+$actualDirs = @(Get-ChildItem -LiteralPath $SdDir -Directory -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty Name)
+foreach ($expected in @("pac", "sound", "movies", "native_shaders")) {
+    if ($actualDirs -cnotcontains $expected) {
+        Write-Host ("  CASE expected '{0}', actual folders: {1}" -f $expected, ($actualDirs -join ", ")) -ForegroundColor Red
+        $problems++
+    }
+}
+
 foreach ($dir in $expectedCounts.Keys) {
     $p = Join-Path $SdDir $dir
     if (-not (Test-Path -LiteralPath $p -PathType Container)) {
@@ -80,9 +91,11 @@ if ($StageDir) {
         Fail "staged folder not found: $StageDir"
     }
     Write-Host ""
-    Write-Host "Comparing names and sizes with $StageDir ..."
+    Write-Host "Comparing names and sizes with $StageDir (case-sensitive) ..."
     $stage = Get-ChildItem -LiteralPath $StageDir -Recurse -File
-    $sd = @{}
+    # Ordinal, not PowerShell's case-insensitive hashtable: a file named
+    # MOVIES\LOGO.BIK must not satisfy movies\logo.bik on the Switch.
+    $sd = New-Object 'System.Collections.Generic.Dictionary[string,long]' ([System.StringComparer]::Ordinal)
     foreach ($f in Get-ChildItem -LiteralPath $SdDir -Recurse -File -ErrorAction SilentlyContinue) {
         $rel = $f.FullName.Substring((Resolve-Path -LiteralPath $SdDir).Path.Length).TrimStart('\', '/')
         $sd[$rel] = $f.Length
@@ -90,8 +103,9 @@ if ($StageDir) {
     $missing = 0
     foreach ($f in $stage) {
         $rel = $f.FullName.Substring((Resolve-Path -LiteralPath $StageDir).Path.Length).TrimStart('\', '/')
+        if ($rel -ieq "svr2011.toml") { continue }  # the game adds defaults on first run
         if (-not $sd.ContainsKey($rel)) {
-            if ($missing -lt 20) { Write-Host "  MISS $rel" -ForegroundColor Red }
+            if ($missing -lt 20) { Write-Host "  MISS/CASE $rel" -ForegroundColor Red }
             $missing++
         } elseif ($sd[$rel] -ne $f.Length) {
             if ($missing -lt 20) {
