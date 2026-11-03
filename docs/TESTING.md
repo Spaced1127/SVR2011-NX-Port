@@ -113,8 +113,10 @@ Homebrew Menu or the console shows an error, copy:
 - the Atmosphère crash report if one was shown,
 - your Switch model, firmware version, and whether it was docked or handheld.
 
-Do not attach the game data, `default.xex`, the NRO, or shader packs to a
-public issue. The log and settings are enough.
+Send the **whole log file**, not only the last error line: the `game folder:`
+line near the top shows which directory the NRO used, and the GPU/audio/input
+lines show how far it got. Do not attach the game data, `default.xex`, the NRO,
+or shader packs to a public issue. The log and settings are enough.
 
 ## Likely first-boot failures
 
