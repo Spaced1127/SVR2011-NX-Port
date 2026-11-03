@@ -1507,6 +1507,7 @@ bool Initialize() {
   REXLOG_INFO("native renderer: GPU {}", r->device->getDescription().name);
   backend::LoadPipelineCache(r->device.get(), PipelineCacheFile());
   if (g_debug_solid) g_debug_ps = ReadShader("debug_solid.ps");
+  REXLOG_INFO("native renderer: command queue");
   r->queue = r->device->createCommandQueue(plume::RenderCommandListType::DIRECT);
   for (uint32_t i = 0; i < kFrames; ++i) {
     r->lists[i] = r->queue->createCommandList();
@@ -1523,13 +1524,16 @@ bool Initialize() {
     r->rings[i].buffer->setName(fmt::format("upload ring {}", i));
     backend::LogBuffer(r->rings[i].buffer.get(), kRingSize + kRingSlack);
   }
+  REXLOG_INFO("native renderer: pipeline layout");
   if (!CreatePipelineLayout(r)) return false;
+  REXLOG_INFO("native renderer: outputs");
   if (!CreateOutputs(r)) return false;
   // Sampler 0: linear wrap (for fetch slots without a texture).
   r->default_sampler = r->device->createSampler(plume::RenderSamplerDesc());
   r->sampler_set->setSampler(0, r->default_sampler.get());
 
   // The setup work (placeholder uploads), submitted and waited for.
+  REXLOG_INFO("native renderer: setup upload");
   r->list = r->lists[0].get();
   r->list->begin();
   r->null_2d = CreatePlaceholder(r, 0);
@@ -1537,7 +1541,9 @@ bool Initialize() {
   r->null_cube = CreatePlaceholder(r, 2);
   r->list->end();
   r->queue->executeCommandLists(r->list, r->fences[0].get());
+  REXLOG_INFO("native renderer: setup upload submitted; waiting");
   r->queue->waitForCommandFence(r->fences[0].get());
+  REXLOG_INFO("native renderer: setup upload complete");
   r->garbage.clear();
   r->zero_buffer = r->device->createBuffer(plume::RenderBufferDesc::UploadBuffer(256, plume::RenderBufferFlag::VERTEX));
   std::memset(r->zero_buffer->map(), 0, 256);

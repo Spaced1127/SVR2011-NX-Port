@@ -93,6 +93,11 @@ endif()
 
 if(PLUME_PLATFORM_SWITCH)
     target_compile_definitions(plume PUBLIC VK_USE_PLATFORM_VI_NN)
+    # Horizon has no pthread_rwlock: VMA's default std::shared_mutex throws
+    # std::system_error(ENOSYS) in vmaCreateAllocator. Use VMA's mutex-based
+    # lock. PUBLIC so every consumer that includes vk_mem_alloc.h agrees on
+    # the VmaMutex layout.
+    target_compile_definitions(plume PUBLIC VMA_USE_STL_SHARED_MUTEX=0)
     if(DEFINED PLUME_SWITCH_DEVKITPRO AND NOT "${PLUME_SWITCH_DEVKITPRO}" STREQUAL "")
         target_include_directories(plume PUBLIC "${PLUME_SWITCH_DEVKITPRO}/libnx/include")
     elseif(DEFINED DEVKITPRO AND NOT "${DEVKITPRO}" STREQUAL "")

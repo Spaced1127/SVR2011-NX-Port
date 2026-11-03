@@ -11,6 +11,14 @@
 #==========================================================
 include_guard(GLOBAL)
 
+# Horizon does not implement pthread_rwlock, so libstdc++'s std::shared_mutex
+# throws std::system_error("Function not implemented") when constructed. The
+# Vulkan Memory Allocator uses std::shared_mutex by default, and plume creates
+# its VMA allocator during device creation. Use VMA's own std::mutex-based
+# lock instead (VMA_USE_STL_SHARED_MUTEX=0). This must be the same for every
+# translation unit that includes vk_mem_alloc.h, hence a global definition.
+add_compile_definitions(VMA_USE_STL_SHARED_MUTEX=0)
+
 set(REXGLUE_SWITCH_NVK_SDK "" CACHE PATH
     "portlibs/switch directory of the Mesa Horizon SDK (static NVK driver)")
 if(NOT EXISTS "${REXGLUE_SWITCH_NVK_SDK}/lib/libvulkan.a")
