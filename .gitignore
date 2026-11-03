@@ -63,9 +63,10 @@
 /port/SaveBackups/
 /port/UtilityDrive/
 
-# Build trees
+# Build trees and release zips
 /out/
 /build/
+/dist/
 /cmake-build-*/
 CMakeCache.txt
 CMakeFiles/

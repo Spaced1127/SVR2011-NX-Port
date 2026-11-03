@@ -28,9 +28,12 @@ The recommended release is **source + build/installer tools only**:
   generates the game files, shader library and NRO locally.
 
 A release must not contain a ready-to-play NRO with the recompiled game code,
-because that code is a derivative work of the game. If the project later
-decides to distribute a prebuilt NRO, that decision needs a legal review
-first; the current policy is source-only.
+because that code is a derivative work of the game. Streaming the game's
+assets from the user's folder does not change that: the NRO still contains the
+translated game code. The same applies to a shader pack generated from the
+game's shaders. If the project later decides to distribute a prebuilt NRO,
+that decision needs a legal review first; the current policy is source-only.
+See [DISTRIBUTION.md](DISTRIBUTION.md) for the folder-based builder.
 
 ## User responsibilities
 

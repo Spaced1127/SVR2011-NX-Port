@@ -36,6 +36,15 @@ Do not open issues or pull requests that attach an ISO, `default.xex`, game
 files, shader packs, textures, audio, video, screenshots of the game, or a
 prebuilt NRO. See [docs/LEGAL.md](docs/LEGAL.md).
 
+## Release model
+
+The public release is a **builder, not a playable NRO**. The NRO contains the
+recompiled game code generated from `default.xex`, so distributing it would
+distribute the game's code even if all assets were streamed from the user's
+folder. The release contains the source and the one-click builder; the user's
+PC produces the NRO from their own game folder. See
+[docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
+
 ---
 
 ## What works
@@ -79,8 +88,13 @@ prebuilt NRO. See [docs/LEGAL.md](docs/LEGAL.md).
 
 ## Build overview
 
-The full instructions are in [docs/BUILDING.md](docs/BUILDING.md). The short
-version:
+On Windows, extract the release and run `Build SVR2011-NX.cmd`; it asks for
+your extracted game folder and produces the NRO and an SD-card folder. It
+needs WSL2 with Ubuntu and devkitPro (the script checks and explains what is
+missing). The full instructions are in [docs/BUILDING.md](docs/BUILDING.md)
+and [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
+
+The manual WSL/Linux build is:
 
 ```sh
 # 1. Fetch the ReXGlue third-party sources (not committed)

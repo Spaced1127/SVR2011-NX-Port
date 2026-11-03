@@ -8,9 +8,10 @@ first, then boot the game, then make it playable, then make it fast.
 
 The source builds a **66 MB `out/switch/svr2011.nro`** (ARM64, static-pie) with
 devkitA64, the Horizon ReXGlue layer, Mesa NVK and the native Vulkan renderer.
-The generated game code (403 files) compiles. The NRO has **not been run on
-hardware yet**; the next step is the first boot test described in
-[TESTING.md](TESTING.md).
+The generated game code (403 files) compiles. The NRO has **started on
+hardware**: it reached the game's file check. The first test stopped there
+because the SD copy was incomplete (`pac`, `sound` and `movies` were missing);
+that is a data-copy issue, not a runtime crash. See [TESTING.md](TESTING.md).
 
 ## Phase 0 - repository and legal guardrails
 
@@ -95,18 +96,24 @@ over a long session.
 
 ## Phase 6 - installer and release
 
-- [ ] Installer page or PC-side script that reads the user's ISO/XEX and
-      produces the game files, shader pack and NRO locally.
+- [x] Folder-based Windows builder (`Build SVR2011-NX.cmd`,
+      `tools/build_release.ps1`): takes the user's extracted game folder,
+      builds the NRO in WSL and stages the SD folder.
+- [x] Source-only release packaging (`tools/package_release.ps1`) and a zip
+      content check.
 - [ ] Release guard passes; no game data or generated code tracked.
 - [ ] GitHub release notes explain the bring-your-own-game model and the
       title-override requirement.
+- [ ] Optional: ISO-to-NRO builder that also extracts the ISO and generates
+      the shader pack.
 - [ ] Optional: forwarder instructions and a recommended Sphaira setup.
 - [ ] Optional: DLC, mods, custom music/movies and online, if they can be
       supported without shipping game material.
 
 **Acceptance:** a new user with a modded Switch, their own game and a PC can
 follow the instructions and build/install the port without receiving any
-copyrighted material from this project.
+copyrighted material from this project. The public release is a builder, not
+a prebuilt NRO; see [DISTRIBUTION.md](DISTRIBUTION.md).
 
 ## Current known risks
 

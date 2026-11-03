@@ -3,16 +3,20 @@
 #
 #   tools/build_switch.sh --host      build the host code generator
 #   tools/build_switch.sh --codegen   build the host tool and generate the game C++
-#   tools/build_switch.sh --switch    build the NRO (requires the Switch target)
+#   tools/build_switch.sh --nro       generate (if needed) and build the NRO
+#   tools/build_switch.sh --switch    build the host tool, generate and build the NRO
 #
 # Environment:
 #   DEVKITPRO=/opt/devkitpro
-#   REXGLUE_SWITCH_NVK_SDK=/path/to/mesa-sdk/opt/devkitpro/portlibs/switch
+#   PORTLIBS_PREFIX=$DEVKITPRO/portlibs/switch
+#   REXGLUE_SWITCH_NVK_SDK=/path/to/nvk/extracted
 #   PLUME_DIR=$REPO_ROOT/third_party/plume
+#   SVR2011_XEX=/path/to/the/user's/default.xex (copied to port/assets/default.xex)
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEVKITPRO="${DEVKITPRO:-/opt/devkitpro}"
+PORTLIBS_PREFIX="${PORTLIBS_PREFIX:-${DEVKITPRO}/portlibs/switch}"
 REXSDK_DIR="${REXSDK_DIR:-${REPO_ROOT}/sdk}"
 PLUME_DIR="${PLUME_DIR:-${REPO_ROOT}/third_party/plume}"
 NVK_SDK="${REXGLUE_SWITCH_NVK_SDK:-}"
@@ -60,20 +64,41 @@ rexglue_bin() {
       return 0
     fi
   done
-  echo "error: rexglue not found; run tools/build_switch.sh --host first" >&2
-  exit 1
+  return 1
 }
 
+# The generated C++ is a derivative of the user's default.xex. Regenerating it
+# on every build is slow, so record the XEX and manifest hashes and skip when
+# they are unchanged. A different XEX or manifest regenerates it.
 generate() {
-  if [[ ! -f "${REPO_ROOT}/port/assets/default.xex" ]]; then
-    echo "error: put your own default.xex in port/assets/default.xex" >&2
+  local xex="${SVR2011_XEX:-${REPO_ROOT}/port/assets/default.xex}"
+  local dest="${REPO_ROOT}/port/assets/default.xex"
+  if [[ ! -f "${xex}" ]]; then
+    echo "error: default.xex not found: ${xex}" >&2
+    echo "       put your own game executable at port/assets/default.xex" >&2
     exit 1
   fi
+  if [[ "$(cd "$(dirname "${xex}")" && pwd)/$(basename "${xex}")" != "${dest}" ]]; then
+    echo "== using game executable: ${xex}"
+    cp -f "${xex}" "${dest}"
+  fi
+
+  local stamp="${REPO_ROOT}/port/generated/.xex-sha256"
+  local manifest="${REPO_ROOT}/port/svr2011_manifest.toml"
+  local hash
+  hash="$(sha256sum "${dest}" "${manifest}" | sha256sum | cut -d' ' -f1)"
+  if [[ -f "${stamp}" && "$(cat "${stamp}")" == "${hash}" && -n "$(ls -A "${REPO_ROOT}/port/generated/default" 2>/dev/null)" ]]; then
+    echo "== codegen: already generated for this default.xex"
+    return 0
+  fi
+
   echo "== codegen"
   (
     cd "${REPO_ROOT}/port"
     "$(rexglue_bin)" codegen svr2011_manifest.toml
   )
+  mkdir -p "${REPO_ROOT}/port/generated"
+  printf '%s\n' "${hash}" > "${stamp}"
 }
 
 build_switch() {
@@ -105,7 +130,7 @@ build_switch() {
     -DPLUME_BUILD_EXAMPLES=OFF \
     -DPLUME_SWITCH_DEVKITPRO="${DEVKITPRO}" \
     -DPLUME_SWITCH_NVK_LIBRARY="${NVK_SDK}/lib/libvulkan.a" \
-    -DCMAKE_PREFIX_PATH="${DEVKITPRO}/portlibs/switch"
+    -DCMAKE_PREFIX_PATH="${PORTLIBS_PREFIX}"
   cmake --build "${REPO_ROOT}/out/switch" -j "${JOBS}"
 }
 
@@ -117,13 +142,20 @@ case "${MODE}" in
     build_host
     generate
     ;;
+  --nro)
+    if ! rexglue_bin >/dev/null; then
+      build_host
+    fi
+    generate
+    build_switch
+    ;;
   --switch)
     build_host
     generate
     build_switch
     ;;
   *)
-    echo "usage: $0 [--host|--codegen|--switch]" >&2
+    echo "usage: $0 [--host|--codegen|--nro|--switch]" >&2
     exit 2
     ;;
 esac

@@ -31,6 +31,20 @@ Add `-DryRun` to see the sizes without copying, and `-IncludeOptional` to also
 take `Mods`, `DLC`, `Music` and `Custom Movies` if they exist. The output folder
 must stay outside the repository, and it must never be uploaded or shared.
 
+After copying to the SD card, check it before launching:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\verify_sd.ps1 `
+    -SdDir "E:\switch\svr2011" `
+    -StageDir "H:\Projects\svr2011-sd"
+```
+
+It checks the required files and the `pac` (265), `sound` (8) and `movies`
+(87) file counts. If the game logs "360 of the disc's files missing" with a
+list starting at `movies\logo.bik`, the `pac`, `sound` and `movies` folders
+did not finish copying: wait for the copy to finish and run the verifier
+again.
+
 ## SD card layout
 
 ```text

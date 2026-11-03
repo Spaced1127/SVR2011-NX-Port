@@ -9,6 +9,23 @@ the third-party/portlib setup are usable now. Commands are for WSL2 Ubuntu
 > prebuilt NRO to the repository.** See [LEGAL.md](LEGAL.md). The release
 > guard `tools/check_no_game_data.py` must pass.
 
+## One-click Windows build
+
+If you are on Windows and have the game installed in a folder, the release
+builder does the whole build:
+
+```text
+Build SVR2011-NX.cmd
+```
+
+It opens a folder picker, runs the WSL build, and leaves the NRO and an SD
+folder in `%LOCALAPPDATA%\SVR2011-NX\dist`. It needs WSL2 with Ubuntu and
+devkitPro; it checks both and prints the install link if devkitPro is missing.
+The first build takes 15-40 minutes.
+
+The rest of this page is the manual WSL/Linux build and the details behind the
+builder.
+
 ## 1. Prerequisites
 
 - **devkitPro** with:
@@ -217,3 +234,5 @@ Album applet mode does not give the game enough memory.
    requirement.
 4. The release contains source and build/installer tools only. Do not attach
    a prebuilt NRO with the recompiled game code.
+5. `tools/package_release.ps1` creates the source-only zip from `git archive`
+   and verifies its contents. See [DISTRIBUTION.md](DISTRIBUTION.md).

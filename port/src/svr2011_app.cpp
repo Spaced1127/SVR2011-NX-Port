@@ -327,12 +327,13 @@ void CheckGameFilesThere() {
     if (list.size() < 600) list += (list.empty() ? "" : ", ") + m.path;
   }
   if (!essential) {
-    REXLOG_WARN("game files: {} of the disc's files missing from the game folder: {}", missing.size(), list);
+    REXLOG_WARN("game files: {} of the disc's files missing from {}: {}", missing.size(),
+                rex::filesystem::GetExecutableFolder().string(), list);
     return;
   }
-  REXLOG_ERROR("game files: {} of the disc's files missing from the game folder ({} the game can't start without): {}"
+  REXLOG_ERROR("game files: {} of the disc's files missing from {} ({} the game can't start without): {}"
                " - not started (reinstall from the Xbox 360 disc image: launcher Install, then Verify game files)",
-               missing.size(), essential, list);
+               missing.size(), rex::filesystem::GetExecutableFolder().string(), essential, list);
   rex::FlushLogging();
 #if defined(_WIN32)
   if (!std::getenv("SVR2011_TEST_NO_DIALOGS")) {
