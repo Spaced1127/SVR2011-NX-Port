@@ -331,6 +331,19 @@ bool RexSwitchPinCurrentThreadToCore(int core) {
  */
 int RexSwitchCurrentCore(void) { return int(svcGetCurrentProcessorNumber()); }
 
+/*
+ * Horizon's pthread_detach returns ENOSYS. libstdc++'s std::thread::detach()
+ * then throws std::system_error ("Function not implemented") and the thread's
+ * destructor calls std::terminate. The port's worker threads (pipeline
+ * prebuild, texture loader, logging, ...) are meant to run to process exit, so
+ * report success and let them finish. Their kernel resources are released when
+ * the process exits. The link uses --wrap=pthread_detach for this.
+ */
+int __wrap_pthread_detach(pthread_t thread) {
+  (void)thread;
+  return 0;
+}
+
 }  // extern "C"
 
 #endif  /* REX_PLATFORM_SWITCH */

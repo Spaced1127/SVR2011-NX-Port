@@ -102,7 +102,10 @@ function(rexglue_switch_configure_target target_name)
     endforeach()
     string(JOIN "," _whole_csv ${_whole})
     target_link_options(${target_name} PRIVATE
-        "LINKER:--whole-archive,${_whole_csv},--no-whole-archive")
+        "LINKER:--whole-archive,${_whole_csv},--no-whole-archive"
+        # Horizon's pthread_detach is ENOSYS; the SDK supplies a wrapper so
+        # std::thread::detach() does not throw and terminate the app.
+        "LINKER:--wrap=pthread_detach")
     set_property(TARGET ${target_name} APPEND PROPERTY LINK_DEPENDS ${_whole})
     # Still linked normally, for the build order and their own dependencies
     # (glslang, FFmpeg, ...), which stay regular archives.
