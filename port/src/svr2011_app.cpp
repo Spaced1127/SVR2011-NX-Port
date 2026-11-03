@@ -621,18 +621,25 @@ void Svr2011App::OnCreateDialogs(rex::ui::ImGuiDrawer* drawer) {
 // The GRAPHICS page's fonts (bold, like the game's menus); ImGui's own
 // stays the default for the overlays.
 void Svr2011App::OnConfigureFonts(ImFontAtlas* atlas) {
+  ImFont* menu = nullptr;
+  ImFont* title = nullptr;
+  std::error_code ec;
+#if defined(_WIN32)
   const char* kBold = "C:\\Windows\\Fonts\\segoeuib.ttf";
   const char* kBoldItalic = "C:\\Windows\\Fonts\\segoeuiz.ttf";
-  ImFont* menu = std::filesystem::exists(kBold) ? atlas->AddFontFromFileTTF(kBold, 30.0f) : nullptr;
-  ImFont* title =
-      std::filesystem::exists(kBoldItalic) ? atlas->AddFontFromFileTTF(kBoldItalic, 40.0f) : nullptr;
+  if (std::filesystem::exists(kBold, ec)) menu = atlas->AddFontFromFileTTF(kBold, 30.0f);
+  if (std::filesystem::exists(kBoldItalic, ec)) title = atlas->AddFontFromFileTTF(kBoldItalic, 40.0f);
+#endif
   svr2011::SetGraphicsPageFonts(menu, title ? title : menu);
   svr2011::SetOnlineOverlayFonts(menu, title ? title : menu);
-  // The touch controller's labels: the menu font, or the phone's own.
+  // The touch controller's labels: the menu font, or the phone's own. On
+  // Switch there is no system font; ImGui's built-in font is used.
   ImFont* touch = menu;
+#if defined(__ANDROID__)
   for (const char* f : {"/system/fonts/Roboto-Bold.ttf", "/system/fonts/Roboto-Regular.ttf"}) {
-    if (!touch && std::filesystem::exists(f)) touch = atlas->AddFontFromFileTTF(f, 48.0f);
+    if (!touch && std::filesystem::exists(f, ec)) touch = atlas->AddFontFromFileTTF(f, 48.0f);
   }
+#endif
   svr2011::SetTouchControlsFont(touch);
   svr2011::SetAchievementsPageFonts(menu, title ? title : menu);
   svr2011::SetJukeboxPageFonts(menu, title ? title : menu);
