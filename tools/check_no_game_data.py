@@ -40,6 +40,9 @@ FORBIDDEN_NAMES = {
 FORBIDDEN_PARTS = {
     "native_shaders",
     "generated/default",
+    "port/generated",
+    "sdk/out",
+    "third_party/nvk",
     "saves",
     "userdata",
     "mods",

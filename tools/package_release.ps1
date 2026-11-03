@@ -66,8 +66,11 @@ $forbiddenNames = @(
 )
 $forbiddenParts = @(
     "/port/generated/", "/native_shaders/", "/third_party/nvk/",
-    "/sdk/thirdparty/", "/out/", "/dist/"
+    "/sdk/out/", "/out/", "/dist/"
 )
+# sdk/thirdparty is tracked only for the port's 10 overlay files (the
+# marker-aware CMakeLists and the FFmpeg configs); the fetched tree is not in
+# the zip because git archive only takes tracked files.
 
 $zip = [System.IO.Compression.ZipFile]::OpenRead($OutFile)
 $bad = New-Object System.Collections.Generic.List[string]

@@ -67,6 +67,7 @@
 /out/
 /build/
 /dist/
+/sdk/out/
 /cmake-build-*/
 CMakeCache.txt
 CMakeFiles/
