@@ -52,6 +52,11 @@ and build tools only, which is the policy in [LEGAL.md](LEGAL.md).
    or a forwarder with a 39-bit address space. Album applet mode does not give
    the game enough memory.
 
+The work folder defaults to `%LOCALAPPDATA%\SVR2011-NX\work`; pass
+`-WorkDir` to put it on a faster drive, or `-Clean` to rebuild from scratch.
+The first build downloads the ReXGlue third-party sources (about 1 GB) and the
+NVK archive.
+
 The builder:
 
 - copies the release source to `%LOCALAPPDATA%\SVR2011-NX\work\src`;
