@@ -57,6 +57,9 @@ The work folder defaults to `%LOCALAPPDATA%\SVR2011-NX\work`; pass
 The first build downloads the ReXGlue third-party sources (about 1 GB) and the
 NVK archive.
 
+The folder builder was tested end-to-end on Windows 11 with WSL2 Ubuntu
+26.04: it built the NRO and the verifier accepted the staged SD folder.
+
 The builder:
 
 - copies the release source to `%LOCALAPPDATA%\SVR2011-NX\work\src`;
