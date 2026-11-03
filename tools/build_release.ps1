@@ -304,8 +304,9 @@ function Invoke-Wsl([string]$ScriptWsl, [switch]$Root) {
     $oldPreference = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     & wsl.exe @wslArgs 2>&1 | ForEach-Object {
-        Write-Host $_
-        [System.IO.File]::AppendAllText($log, "$_`r`n", $utf8)
+        $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }
+        Write-Host $line
+        [System.IO.File]::AppendAllText($log, "$line`r`n", $utf8)
     }
     $code = $LASTEXITCODE
     $ErrorActionPreference = $oldPreference
