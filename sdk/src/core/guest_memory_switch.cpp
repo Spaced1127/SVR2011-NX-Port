@@ -14,6 +14,8 @@
 #include <mutex>
 #include <vector>
 
+#include <rex/logging.h>
+
 namespace {
 
 constexpr size_t kPageSize  = 0x1000;
@@ -22,6 +24,16 @@ constexpr size_t kPageSize  = 0x1000;
  * page table.
  */
 constexpr size_t kBlockSize = 0x200000;
+/*
+ * A chunk is the unit of backing and of code-alias mapping. Committing a whole
+ * region instead of the exact requested range keeps the number of
+ * svcMapProcessCodeMemory mappings small: the kernel's memory-block slab is
+ * finite, and one mapping per small XMemAlloc exhausts it (2001-0103,
+ * resource exhausted). 8 MB is large enough to cover thousands of small
+ * allocations and small enough that rounding a sparse heap up to a region
+ * boundary does not waste much memory.
+ */
+constexpr size_t kChunkSize = 8 * 1024 * 1024;
 
 constexpr size_t AlignDown(size_t v, size_t a) { return v & ~(a - 1); }
 constexpr size_t AlignUp(size_t v, size_t a) { return (v + a - 1) & ~(a - 1); }
@@ -117,6 +129,13 @@ struct State {
 State& S() {
     static State s;
     return s;
+}
+
+void LogSystemResource(const char* where) {
+    u64 total = 0, used = 0;
+    svcGetInfo(&total, InfoType_SystemResourceSizeTotal, CUR_PROCESS_HANDLE, 0);
+    svcGetInfo(&used, InfoType_SystemResourceSizeUsed, CUR_PROCESS_HANDLE, 0);
+    REXLOG_ERROR("{}: system resource {}/{} MB", where, used >> 20, total >> 20);
 }
 
 Handle Proc() { return envGetOwnProcessHandle(); }
@@ -367,6 +386,12 @@ uint8_t* RexGmInit(size_t size) {
     s.size = size;
     g_size_rapido.store(size, std::memory_order_release);
     g_base_rapido.store(s.base, std::memory_order_release);
+
+    u64 sys_total = 0, sys_used = 0;
+    svcGetInfo(&sys_total, InfoType_SystemResourceSizeTotal, CUR_PROCESS_HANDLE, 0);
+    svcGetInfo(&sys_used, InfoType_SystemResourceSizeUsed, CUR_PROCESS_HANDLE, 0);
+    REXLOG_INFO("RexGmInit: window 0x{:X} bytes, system resource {}/{} MB",
+                size, sys_used >> 20, sys_total >> 20);
     return s.base;
 }
 
@@ -494,13 +519,30 @@ bool RexGmCommit(size_t offset, size_t length, RexGmAccess access) {
         if (sig != s.chunks.end() && sig->second.offset < hueco_fin)
             hueco_fin = sig->second.offset;
 
-        const size_t tam = hueco_fin - cur;
+        /*
+         * Commit at least a whole kChunkSize region when the free space after
+         * the request is available. This is what keeps the number of
+         * svcMapProcessCodeMemory mappings bounded: a 4 KB XMemAlloc commits
+         * one 8 MB region, and the next thousands of small allocations inside
+         * it find a chunk and do not map anything new.
+         *
+         * Never cross the next existing chunk, so chunks cannot overlap.
+         */
+        const size_t limite = (sig != s.chunks.end()) ? sig->second.offset : s.size;
+        size_t fin_deseado = cur + kChunkSize;
+        if (fin_deseado > limite) fin_deseado = limite;
+        size_t tam = hueco_fin - cur;
+        if (fin_deseado > hueco_fin) tam = fin_deseado - cur;
+
         const size_t align = (tam >= kBlockSize && (cur & (kBlockSize - 1)) == 0)
                                  ? kBlockSize : kPageSize;
 
         void* backing = memalign(align, tam);
         if (!backing) {
             s.last_result = REX_GM_ERR_NOMEM;
+            REXLOG_ERROR("RexGmCommit: memalign(0x{:X}, 0x{:X}) failed at 0x{:X} "
+                         "({} chunks, {} MB committed)",
+                         align, tam, cur, s.chunks.size(), s.committed >> 20);
             return false;
         }
         memset(backing, 0, tam);
@@ -515,11 +557,18 @@ bool RexGmCommit(size_t offset, size_t length, RexGmAccess access) {
         if (!shadow) {
             free(backing);
             s.last_result = REX_GM_ERR_NOCODEVA;
+            REXLOG_ERROR("RexGmCommit: no code range for 0x{:X} bytes at 0x{:X} "
+                         "({} chunks, {} MB committed)",
+                         tam, cur, s.chunks.size(), s.committed >> 20);
             return false;
         }
         if (R_FAILED(rc)) {
             free(backing);
             s.last_result = rc;
+            REXLOG_ERROR("RexGmCommit: svcMapProcessCodeMemory failed 0x{:08X} for "
+                         "0x{:X} bytes at 0x{:X} ({} chunks, {} MB committed)",
+                         rc, tam, cur, s.chunks.size(), s.committed >> 20);
+            LogSystemResource("RexGmCommit");
             return false;
         }
 
@@ -530,6 +579,10 @@ bool RexGmCommit(size_t offset, size_t length, RexGmAccess access) {
                                       reinterpret_cast<u64>(backing), tam);
             free(backing);
             s.last_result = rc;
+            REXLOG_ERROR("RexGmCommit: svcSetProcessMemoryPermission failed 0x{:08X} for "
+                         "0x{:X} bytes at 0x{:X} ({} chunks, {} MB committed)",
+                         rc, tam, cur, s.chunks.size(), s.committed >> 20);
+            LogSystemResource("RexGmCommit");
             return false;
         }
 
@@ -542,7 +595,7 @@ bool RexGmCommit(size_t offset, size_t length, RexGmAccess access) {
         s.chunks[cur] = c;
         s.committed += tam;
 
-        cur = hueco_fin;
+        cur = cur + tam;
     }
     return true;
 }

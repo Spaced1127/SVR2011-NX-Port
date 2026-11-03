@@ -12,6 +12,7 @@
 // Disable warnings about unused parameters for kernel functions
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+#include <atomic>
 #include <cstring>
 
 #include <rex/assert.h>
@@ -409,11 +410,15 @@ u32 MmAllocatePhysicalMemoryEx_entry(u32 flags, u32 region_size, u32 protect_bit
   uint32_t base_address;
   if (!heap->AllocRange(heap_min_addr, heap_max_addr, adjusted_size, adjusted_alignment,
                         allocation_type, protect, top_down, &base_address)) {
-    if (large_allocation) {
+    static std::atomic<uint32_t> large_failures{0};
+    const uint32_t failure = large_failures.fetch_add(1, std::memory_order_relaxed);
+    if (large_allocation && failure < 8) {
       REXKRNL_WARN("MmAllocatePhysicalMemoryEx FAILED: size={:#x} flags={:#x} "
                    "protect={:#x} min={:#x} max={:#x} align={:#x}",
                    (uint32_t)region_size, (uint32_t)flags, (uint32_t)protect_bits,
                    (uint32_t)min_addr_range, (uint32_t)max_addr_range, (uint32_t)alignment);
+    } else if (large_allocation && failure == 8) {
+      REXKRNL_WARN("MmAllocatePhysicalMemoryEx: further large failures suppressed");
     }
     // Failed - assume no memory available.
     return 0;
@@ -438,6 +443,16 @@ void MmFreePhysicalMemory_entry(u32 type, u32 base_address) {
   assert_true((base_address & 0x1F) == 0);
 
   auto heap = REX_KERNEL_MEMORY()->LookupHeap(base_address);
+  if (!heap) {
+    REXKRNL_ERROR("MmFreePhysicalMemory: no heap for address {:#x}", (uint32_t)base_address);
+    return;
+  }
+  uint32_t region_size = 0;
+  heap->QuerySize(base_address, &region_size);
+  if (region_size >= (64u << 20)) {
+    REXKRNL_WARN("MmFreePhysicalMemory -> {:#x}: size={:#x}", (uint32_t)base_address,
+                 region_size);
+  }
   heap->Release(base_address);
 }
 

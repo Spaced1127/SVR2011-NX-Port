@@ -1571,10 +1571,12 @@ bool BaseHeap::AllocRange(uint32_t low_address, uint32_t high_address, uint32_t 
       REXSYS_ERROR("BaseHeap::Alloc: further allocation failures suppressed");
     }
 #if REX_PLATFORM_SWITCH
-    // The guest game retries a failed allocation in a tight loop, which
-    // starves Horizon and makes the Home button unresponsive. Stop cleanly
-    // after a burst instead of freezing the console.
-    if (failure >= 100) {
+    // The guest game probes for the largest free physical block by walking
+    // down from 480 MB in 1 MB steps. That is a normal, finite burst (a few
+    // hundred attempts), so do not treat it as a hang. Only stop if the
+    // allocator is clearly stuck in an unbounded loop, which would starve
+    // Horizon and make the Home button unresponsive.
+    if (failure >= 2000) {
       REXSYS_ERROR(
           "BaseHeap::Alloc: guest heap exhausted ({} failed allocations); "
           "exiting instead of freezing",
@@ -2001,7 +2003,10 @@ bool PhysicalHeap::Alloc(uint32_t size, uint32_t alignment, uint32_t allocation_
   uint32_t parent_address;
   if (!parent_heap_->AllocRange(parent_heap_start, parent_heap_end, size, alignment,
                                 allocation_type, protect, top_down, &parent_address)) {
-    REXSYS_ERROR("PhysicalHeap::Alloc unable to alloc physical memory in parent heap");
+    static std::atomic<uint32_t> physical_alloc_failures{0};
+    if (physical_alloc_failures.fetch_add(1, std::memory_order_relaxed) < 8) {
+      REXSYS_ERROR("PhysicalHeap::Alloc unable to alloc physical memory in parent heap");
+    }
     return false;
   }
 
@@ -2034,7 +2039,10 @@ bool PhysicalHeap::AllocFixed(uint32_t base_address, uint32_t size, uint32_t ali
   // TODO(benvanik): flag for ensure-not-committed?
   uint32_t parent_base_address = GetPhysicalAddress(base_address);
   if (!parent_heap_->AllocFixed(parent_base_address, size, alignment, allocation_type, protect)) {
-    REXSYS_ERROR("PhysicalHeap::Alloc unable to alloc physical memory in parent heap");
+    static std::atomic<uint32_t> physical_alloc_failures{0};
+    if (physical_alloc_failures.fetch_add(1, std::memory_order_relaxed) < 8) {
+      REXSYS_ERROR("PhysicalHeap::Alloc unable to alloc physical memory in parent heap");
+    }
     return false;
   }
 
@@ -2072,7 +2080,10 @@ bool PhysicalHeap::AllocRange(uint32_t low_address, uint32_t high_address, uint3
   uint32_t parent_address;
   if (!parent_heap_->AllocRange(parent_low_address, parent_high_address, size, alignment,
                                 allocation_type, protect, top_down, &parent_address)) {
-    REXSYS_ERROR("PhysicalHeap::Alloc unable to alloc physical memory in parent heap");
+    static std::atomic<uint32_t> physical_alloc_failures{0};
+    if (physical_alloc_failures.fetch_add(1, std::memory_order_relaxed) < 8) {
+      REXSYS_ERROR("PhysicalHeap::Alloc unable to alloc physical memory in parent heap");
+    }
     return false;
   }
 
