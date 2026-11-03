@@ -110,7 +110,8 @@ graphics pipelines; expect a stutter while the shader cache fills.
 
 ## SD card layout
 
-Once the NRO is built, the target layout is:
+On Windows, `tools/stage_sd.ps1` assembles this folder from your PC install
+(see [docs/TESTING.md](docs/TESTING.md)). The target layout is:
 
 ```text
 sdmc:/switch/svr2011/

@@ -15,6 +15,22 @@ goal is to get a log and the first frame, then fix them one at a time.
   `pipelines.list`), copied from your own install.
 - The `svr2011.nro` from `out/switch/`.
 
+## Assembling the folder on Windows
+
+If the game is already installed in a PC folder (the layout the PC port uses),
+`tools/stage_sd.ps1` copies the right files and writes a Switch settings file:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\stage_sd.ps1 `
+    -GameDir "H:\Projects\SVR2011" `
+    -Nro "out\switch\svr2011.nro" `
+    -OutDir "H:\Projects\svr2011-sd"
+```
+
+Add `-DryRun` to see the sizes without copying, and `-IncludeOptional` to also
+take `Mods`, `DLC`, `Music` and `Custom Movies` if they exist. The output folder
+must stay outside the repository, and it must never be uploaded or shared.
+
 ## SD card layout
 
 ```text

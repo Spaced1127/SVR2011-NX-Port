@@ -166,7 +166,14 @@ The NRO has not been run on hardware yet. See [TESTING.md](TESTING.md).
 
 The NRO needs the user's game data. Use the PC port's launcher to install the
 game into a folder (it extracts the ISO and applies the `string.pac` /
-`menu.pac` patches), then copy the folder to:
+`menu.pac` patches). On Windows, stage the SD folder with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\stage_sd.ps1 `
+    -GameDir "H:\Projects\SVR2011" -OutDir "H:\Projects\svr2011-sd"
+```
+
+Then copy the contents of that folder to:
 
 ```text
 sdmc:/switch/svr2011/
