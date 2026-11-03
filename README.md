@@ -76,6 +76,7 @@ PC produces the NRO from their own game folder. See
 - A PC with:
   - WSL2 Ubuntu 24.04/26.04 or a Linux machine (the build scripts target
     Linux; Windows-native builds are possible but not documented yet).
+    Ubuntu 22.04 needs a newer Clang than its default for the C++23 host tool.
   - devkitPro with devkitA64, libnx and the Switch tools.
   - CMake 3.25+, Ninja, Git, Python 3.10+, Clang/GCC.
   - 32 GB RAM recommended for the LTO build of the recompiled game.

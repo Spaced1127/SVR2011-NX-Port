@@ -28,7 +28,8 @@ and build tools only, which is the policy in [LEGAL.md](LEGAL.md).
 
 ## What the user needs
 
-- Windows 10/11 with WSL2 (Ubuntu 22.04, 24.04 or 26.04).
+- Windows 10/11 with WSL2 (Ubuntu 24.04 or 26.04 recommended; 22.04 needs a
+  newer Clang than its default for the C++23 host tool).
 - devkitPro with devkitA64, libnx and switch-tools. The builder checks for it
   and prints the install link if it is missing.
 - About 10 GB free disk (toolchain, source, generated code and build tree).
