@@ -3,8 +3,19 @@
 
 #include "native/gpu.h"
 
+#include <rex/cvar.h>
 #include <rex/external_frame.h>
 #include <rex/logging.h>
+
+#if defined(__SWITCH__)
+// The deko3d branch draws on the console's own API by default; "auto" keeps
+// the emulator's Vulkan backend for comparing.
+REXCVAR_DEFINE_STRING(native_backend, "deko3d", "GPU",
+                      "Native renderer backend: deko3d (the Switch's own API) or auto (the emulator's Vulkan)");
+#else
+REXCVAR_DEFINE_STRING(native_backend, "auto", "GPU",
+                      "Native renderer backend: auto (the emulator's Vulkan/D3D12)");
+#endif
 
 namespace svr2011::native::backend {
 
@@ -14,23 +25,36 @@ std::unique_ptr<Backend> CreateD3D12Backend() { return nullptr; }  // (Windows o
 #if !defined(_WIN32)
 std::unique_ptr<Backend> CreateD3D11Backend() { return nullptr; }  // (Windows only)
 #endif
+#if !defined(__SWITCH__)
+std::unique_ptr<Backend> CreateDeko3DBackend() { return nullptr; }  // (Switch only)
+#endif
 
 namespace {
 std::unique_ptr<Backend> g_backend;
 }  // namespace
 
 std::unique_ptr<plume::RenderInterface> CreateInterface(std::string* device_name) {
-  g_backend = rex::external_frame::GetVulkanDevice()   ? CreateVulkanBackend()
-              : rex::external_frame::GetD3D11Device() ? CreateD3D11Backend()
-                                                      : CreateD3D12Backend();
+  if (REXCVAR_GET(native_backend) == "deko3d") {
+    g_backend = CreateDeko3DBackend();
+  } else {
+    g_backend = rex::external_frame::GetVulkanDevice()   ? CreateVulkanBackend()
+                : rex::external_frame::GetD3D11Device() ? CreateD3D11Backend()
+                                                        : CreateD3D12Backend();
+  }
   if (!g_backend) {
-    REXLOG_ERROR("native renderer: no backend for the emulator's graphics API");
+    REXLOG_ERROR("native renderer: no backend for {}",
+                 REXCVAR_GET(native_backend) == "deko3d" ? "deko3d" : "the emulator's graphics API");
     return nullptr;
   }
   REXLOG_INFO("native renderer: {} backend", g_backend->api() == Api::kVulkan  ? "Vulkan"
                                               : g_backend->api() == Api::kD3D11 ? "D3D11"
+                                              : g_backend->api() == Api::kDeko3D ? "deko3d"
                                                                                 : "D3D12");
   return g_backend->CreateInterface(device_name);
+}
+
+void SetDevice(plume::RenderDevice* device) {
+  if (g_backend) g_backend->SetDevice(device);
 }
 
 Api ActiveApi() { return g_backend ? g_backend->api() : Api::kNone; }
@@ -91,6 +115,7 @@ bool VideoMemory(uint64_t* used, uint64_t* budget) {
     case Api::kVulkan: return VulkanVideoMemory(used, budget);
     case Api::kD3D12:
     case Api::kD3D11: return DxgiVideoMemory(used, budget);
+    case Api::kDeko3D: return false;  // (the deko3d device reports its own memory figures)
     default: return false;
   }
 }

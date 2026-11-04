@@ -55,6 +55,58 @@ backend for it. plume's deko3d backend is MIT; uam is zlib/MIT/MPL-2.0.
 - `sdk/src/ui/window_switch.cpp`, `sdk/src/ui/vulkan/vulkan_presenter.cpp`:
   the Switch window and presentation.
 
+## Progress (this branch)
+
+- **plume deko3d back end imported** (`plume_deko3d.{h,cpp}`,
+  `plume_deko3d_commands.cpp`, MIT) and `uam` (`third_party/uam`,
+  zlib/MIT/MPL-2.0) added. `PLUME_DEKO3D=ON` builds them for the Switch.
+- **`backend_deko3d.cpp`** added: plume deko3d device, presentation queue and
+  a default-NWindow swapchain; the finished frame is copied and presented.
+  `native_backend = "deko3d"` selects it, and on the Switch it is the default.
+- **Shader conversion works on every game shader**: `spirv-cross` Vulkan
+  GLSL -> `tools/deko3d_glsl.py` produces the `// banjo-dk` layout with
+  per-draw `dk_tex_bK` textures (2D, 3D and cube) and `texb=` shared-constant
+  offsets. The renderer's own shaders (present, FSR 1, debug) use bindless
+  `dkh` handles from their own-constants table indices.
+  `tools/deko3d_shaders.py` turns `shaders.spv.pak` into `shaders.dk.pak`
+  (BDK3 blobs for uam): 926 shaders converted, 0 skipped.
+- **Non-compact tables**: deko3d uses the renderer's big texture/sampler
+  tables (set 0/1) as one image descriptor set and one sampler set. The
+  renderer writes global texture indices for deko3d (the 2D, 3D and cube
+  ranges are contiguous in deko3d), and `bindTextures` reads the per-draw
+  texture/sampler words from the upload ring using the shared-constants
+  offset in the push constants.
+- **Presentation**: with `native_backend=deko3d`, `svr2011_app` sets
+  `switch_vulkan_surface=false`, so the SDK's Vulkan presenter never opens a
+  swapchain on the default NWindow; the deko3d backend owns it and presents
+  the frame image 1:1 (RGBA8, 720p handheld / the display resolution docked).
+  The app's Vulkan/ImGui overlays are not drawn on this path yet.
+- **Still open**: hardware test (no Switch in this environment), a persistent
+  DKSH cache, and performance measurement against the NVK baseline.
+
+## Building and testing this branch
+
+```bash
+# PC tools (once): SPIRV-Cross
+git clone --depth 1 https://github.com/KhronosGroup/SPIRV-Cross
+cmake -S SPIRV-Cross -B SPIRV-Cross/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+ninja -C SPIRV-Cross/build spirv-cross
+
+# shader pack (writes shaders.dk.pak beside shaders.spv.pak)
+SPIRV_CROSS=/path/to/spirv-cross python3 tools/deko3d_shaders.py \
+    /path/to/native_shaders /path/to/native_shaders/deko3d
+
+# Switch NRO (devkitPro, libnx deko3d, NVK SDK for the emulated GPU)
+DEVKITPRO=/opt/devkitpro PORTLIBS_PREFIX=/opt/devkitpro/portlibs/switch \
+REXGLUE_SWITCH_NVK_SDK=/path/to/nvk/extracted \
+bash tools/build_switch.sh --switch
+```
+
+Copy `svr2011.nro` and `native_shaders/shaders.dk.pak` to the SD card. The
+deko3d path is selected by `native_backend = "deko3d"` (the default on the
+Switch); `native_backend = "auto"` keeps the emulator's Vulkan backend for
+comparison.
+
 ## Milestones
 
 ### 0. Baseline and build

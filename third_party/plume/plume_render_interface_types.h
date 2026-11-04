@@ -15,7 +15,9 @@
 #include <cfloat>
 #include <cstdint>
 
-#if defined(_WIN32)
+#if defined(__SWITCH__)
+#include <switch.h>
+#elif defined(_WIN32)
 #include <Windows.h>
 #elif defined(__ANDROID__)
 #include "android/native_window.h"
@@ -34,14 +36,14 @@
 #endif
 
 namespace plume {
-#if defined(_WIN32)
+#if defined(__SWITCH__)
+    // Native libnx window (deko3d swapchains and, on the Vulkan path, VK_NN_vi_surface).
+    typedef NWindow* RenderWindow;
+#elif defined(_WIN32)
     // Native HWND handle to the target window.
     typedef HWND RenderWindow;
 #elif defined(__ANDROID__)
     typedef ANativeWindow* RenderWindow;
-#elif defined(__SWITCH__)
-    // The app uses plume's existing-device path; no swapchain is created here.
-    typedef void* RenderWindow;
 #elif defined(PLUME_SDL_VULKAN_ENABLED)
     typedef SDL_Window *RenderWindow;
 #elif defined(__linux__)
@@ -168,6 +170,8 @@ namespace plume {
         R10G10B10A2_TYPELESS,
         R10G10B10A2_UNORM,
         R10G10B10A2_UINT,
+        // Stencil only, 8 bits (deko3d: DkImageFormat_S8).
+        S8_UINT,
         D24_UNORM_S8_UINT,
         MAX
     };
@@ -383,7 +387,9 @@ namespace plume {
         DXIL,
         SPIRV,
         METAL,
-        DXBC  // [svr2011] Direct3D 11 (Shader Model 4 / 5)
+        DXBC,  // [svr2011] Direct3D 11 (Shader Model 4 / 5)
+        // deko3d: a Deko3DShaderBlob (GLSL for uam + optional DKSH), plume_deko3d.h.
+        DEKO3D
     };
 
     enum class RenderRaytracingPipelineLibrarySymbolType {
@@ -433,7 +439,10 @@ namespace plume {
             ACCELERATION_STRUCTURE_SCRATCH = 1U << 7,
             SHADER_BINDING_TABLE = 1U << 8,
             UNORDERED_ACCESS = 1U << 9,
-            DEVICE_ADDRESSABLE = 1U << 10
+            DEVICE_ADDRESSABLE = 1U << 10,
+            // deko3d/Vulkan: an UPLOAD buffer in CPU-cached memory; the CPU writes at
+            // cache speed and publishes with unmap(0, &writtenRange).
+            HOST_CACHED = 1U << 11
         };
     };
 
@@ -672,6 +681,7 @@ namespace plume {
         case RenderFormat::R10G10B10A2_TYPELESS:
         case RenderFormat::R10G10B10A2_UNORM:
         case RenderFormat::R10G10B10A2_UINT:
+        case RenderFormat::S8_UINT:
         case RenderFormat::D24_UNORM_S8_UINT:
             return 1;
         case RenderFormat::BC1_TYPELESS:
@@ -715,7 +725,8 @@ namespace plume {
     }
 
     constexpr bool RenderFormatIsStencil(RenderFormat format) {
-        return format == RenderFormat::D32_FLOAT_S8_UINT || format == RenderFormat::D24_UNORM_S8_UINT;
+        return format == RenderFormat::D32_FLOAT_S8_UINT || format == RenderFormat::D24_UNORM_S8_UINT ||
+               format == RenderFormat::S8_UINT;
     }
 
     constexpr RenderTextureViewDimension RenderTextureDimensionToView(const RenderTextureDimension dimension) {

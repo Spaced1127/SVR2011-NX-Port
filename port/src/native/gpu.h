@@ -22,12 +22,15 @@ struct Frame;
 
 namespace svr2011::native::backend {
 
-enum class Api { kNone, kD3D12, kVulkan, kD3D11 };
+enum class Api { kNone, kD3D12, kVulkan, kD3D11, kDeko3D };
 
 class Backend {
  public:
   virtual ~Backend() = default;
   virtual Api api() const = 0;
+  // The device the renderer created (deko3d: the presentation queue and
+  // swapchain are made here).
+  virtual void SetDevice(plume::RenderDevice* device) { (void)device; }
   virtual std::unique_ptr<plume::RenderInterface> CreateInterface(std::string* device_name) = 0;
   virtual plume::RenderShaderFormat ShaderFormat() const = 0;
   virtual const char* ShaderExtension() const = 0;
@@ -53,10 +56,12 @@ class Backend {
 std::unique_ptr<Backend> CreateD3D12Backend();   // null where D3D12 isn't built
 std::unique_ptr<Backend> CreateVulkanBackend();
 std::unique_ptr<Backend> CreateD3D11Backend();   // null where D3D11 isn't built
+std::unique_ptr<Backend> CreateDeko3DBackend();  // null where deko3d isn't built
 
 // Picks the emulator's API (Vulkan when it runs on Vulkan, else D3D12) and
 // creates the interface and the name of the GPU to draw on.
 std::unique_ptr<plume::RenderInterface> CreateInterface(std::string* device_name);
+void SetDevice(plume::RenderDevice* device);
 Api ActiveApi();
 // Why the backend couldn't make its interface, for the player (empty: no
 // particular reason known).

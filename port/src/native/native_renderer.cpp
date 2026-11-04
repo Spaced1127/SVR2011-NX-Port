@@ -1126,6 +1126,13 @@ plume::RenderDescriptorSetDesc g_slot_descs[2];
 
 bool SlotTables() { return backend::ActiveApi() == backend::Api::kD3D11; }
 
+// deko3d follows the Vulkan paths: descriptor tables bound as sets, constant
+// offsets in push constants, and vertex strides part of the pipeline key.
+bool VulkanStyle() {
+  const backend::Api api = backend::ActiveApi();
+  return api == backend::Api::kVulkan || api == backend::Api::kDeko3D;
+}
+
 // The sampler register of a fetch slot (slot tables).
 uint32_t SlotSampler(uint32_t slot) { return slot >= 16 ? slot - 2 : slot; }
 
@@ -1332,7 +1339,7 @@ void BindTables(Renderer* r, plume::RenderCommandList* list) {
     list->setGraphicsDescriptorSetDynamic(r->constant_sets[r->back_index].get(), 2, zero, 3);
     return;
   }
-  if (backend::ActiveApi() == backend::Api::kVulkan) {
+  if (VulkanStyle()) {
     list->setGraphicsDescriptorSet(r->texture_sets[0].get(), 0);
     list->setGraphicsDescriptorSet(r->sampler_set.get(), 1);
     list->setGraphicsDescriptorSet(r->constant_sets[r->back_index].get(), 2);
@@ -1374,7 +1381,7 @@ bool CreateSlotPipelineLayout(Renderer* r) {
 }
 
 bool CreatePipelineLayout(Renderer* r) {
-  if (backend::ActiveApi() == backend::Api::kVulkan) return CreateVulkanPipelineLayout(r);
+  if (VulkanStyle()) return CreateVulkanPipelineLayout(r);
   if (SlotTables()) return CreateSlotPipelineLayout(r);
   for (int i = 0; i < 4; ++i) {
     // (the count: Vulkan's upper bound for the table; D3D12 ignores it)
@@ -1504,6 +1511,7 @@ bool Initialize() {
     REXLOG_ERROR("native renderer: could not create the device");
     return false;
   }
+  backend::SetDevice(r->device.get());
   REXLOG_INFO("native renderer: GPU {}", r->device->getDescription().name);
   backend::LoadPipelineCache(r->device.get(), PipelineCacheFile());
   if (g_debug_solid) g_debug_ps = ReadShader("debug_solid.ps");
@@ -2833,7 +2841,7 @@ struct PrebuiltPipelines {
 // have the strides of the slots they use built in.
 uint64_t RecordHash(PipelineRecord& rec) {
   PipelineKey key = rec.key;
-  if (backend::ActiveApi() == backend::Api::kVulkan) {
+  if (VulkanStyle()) {
     for (const auto& e : rec.layout) key.layout_hash = key.layout_hash * 31 + rec.strides[e.slotIndex & 15] * 977;
   }
   return XXH3_64bits(&key, sizeof(key));
@@ -3218,10 +3226,12 @@ RenderBufferReference SharedConstants(Renderer* r, bool alpha_test, const Shader
   if (compact || slots) std::fill(&places[0][0], &places[0][0] + 2 * kSlotTextures, UINT32_MAX);
   if (slots) std::fill(u, u + 24 * 4, kIdentitySwizzle);
   // g_ResourceIndices[32] (uint4): 2D, 3D, cube, sampler blocks of 8 x uint4.
+  const bool deko3d = backend::ActiveApi() == backend::Api::kDeko3D;
   for (uint32_t slot = 0; slot < 32 && !compact && !slots; ++slot) {
-    u[(0 * 8 + slot / 4) * 4 + slot % 4] = 0;  // placeholder 2D
-    u[(1 * 8 + slot / 4) * 4 + slot % 4] = 1;  // placeholder 3D
-    u[(2 * 8 + slot / 4) * 4 + slot % 4] = 2;  // placeholder cube
+    // (deko3d's one image table: the placeholders are the first of each range)
+    u[(0 * 8 + slot / 4) * 4 + slot % 4] = deko3d ? r->texture_base[0] + 0 : 0;  // placeholder 2D
+    u[(1 * 8 + slot / 4) * 4 + slot % 4] = deko3d ? r->texture_base[1] + 1 : 1;  // placeholder 3D
+    u[(2 * 8 + slot / 4) * 4 + slot % 4] = deko3d ? r->texture_base[2] + 2 : 2;  // placeholder cube
     u[(3 * 8 + slot / 4) * 4 + slot % 4] = 0;  // linear wrap
   }
   // The textures the shaders sample, from the fetch constants.
@@ -3282,7 +3292,12 @@ RenderBufferReference SharedConstants(Renderer* r, bool alpha_test, const Shader
         continue;
       }
       if (srv == UINT32_MAX) continue;
-      u[(dimension * 8 + slot / 4) * 4 + slot % 4] = srv;
+      // deko3d has one image descriptor table (2D, 3D, cube ranges one after
+      // another), so its shaders index it globally; Vulkan has one array per
+      // dimension.
+      const uint32_t index =
+          backend::ActiveApi() == backend::Api::kDeko3D ? r->texture_base[dimension] + srv : srv;
+      u[(dimension * 8 + slot / 4) * 4 + slot % 4] = index;
       u[(3 * 8 + slot / 4) * 4 + slot % 4] = textures::Sampler(ctx, fetch);
     }
   }
@@ -3308,7 +3323,7 @@ RenderBufferReference SharedConstants(Renderer* r, bool alpha_test, const Shader
 // CBVs on D3D12; on Vulkan their offsets in this frame's upload ring (bound
 // as set 2) in the push constants. The pipeline layout must be set.
 void BindConstants(Renderer* r, const RenderBufferReference constants[4]) {
-  if (backend::ActiveApi() == backend::Api::kVulkan) {
+  if (VulkanStyle()) {
     const plume::RenderBuffer* ring = r->rings[r->back_index].buffer.get();
     uint32_t offsets[4];
     for (int i = 0; i < 4; ++i) {
@@ -3809,7 +3824,7 @@ void Draw(Renderer* r, uint32_t primitive, int32_t base_vertex, uint32_t start, 
     const uint32_t stride = up && i == 0 ? up->stride : i < 15 && !up ? g_streams[i].stride : 0;
     slots[i] = plume::RenderInputSlot(i, stride);
   }
-  if (backend::ActiveApi() == backend::Api::kVulkan) {
+  if (VulkanStyle()) {
     for (const auto& e : layout) layout_hash = layout_hash * 31 + slots[e.slotIndex].stride * 977;
   }
 
@@ -5480,7 +5495,7 @@ void OnResolve(const PPCContext& ctx) {
     dst = {};
     plume::RenderTextureDesc d = plume::RenderTextureDesc::Texture2D(
         dst_host_w, dst_host_h, 1, family,
-        depth && (backend::ActiveApi() == backend::Api::kVulkan || SlotTables()) ? plume::RenderTextureFlag::DEPTH_TARGET
+        depth && (VulkanStyle() || SlotTables()) ? plume::RenderTextureFlag::DEPTH_TARGET
                                                                 : plume::RenderTextureFlag::NONE);
     d.committed = true;
     dst.resource = r->device->createTexture(d);
@@ -5506,8 +5521,9 @@ void OnResolve(const PPCContext& ctx) {
       if (r->fsr2_depth) Retire(r, std::move(r->fsr2_depth));
       plume::RenderTextureDesc d = plume::RenderTextureDesc::Texture2D(
           src_host_w, src_host_h, 1, backend::DepthFormat(),
-          backend::ActiveApi() == backend::Api::kVulkan ? plume::RenderTextureFlag::DEPTH_TARGET
-                                                        : plume::RenderTextureFlag::NONE);
+          backend::ActiveApi() == backend::Api::kVulkan || backend::ActiveApi() == backend::Api::kDeko3D
+              ? plume::RenderTextureFlag::DEPTH_TARGET
+              : plume::RenderTextureFlag::NONE);
       d.committed = true;
       r->fsr2_depth = r->device->createTexture(d);
       r->fsr2_depth_layout = RenderTextureLayout::UNKNOWN;

@@ -105,6 +105,56 @@ if(PLUME_PLATFORM_SWITCH)
     endif()
 endif()
 
+# deko3d back end (banjo-nx/sa2-nx, MIT). Only on the Switch: devkitPro's
+# deko3d and uam's source tree (third_party/uam) are linked here.
+option(PLUME_DEKO3D "deko3d back end (Switch)" OFF)
+set(PLUME_SWITCH_UAM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../uam" CACHE PATH "uam source tree")
+if(PLUME_DEKO3D)
+    if(NOT PLUME_PLATFORM_SWITCH)
+        message(FATAL_ERROR "PLUME_DEKO3D is only available for the Switch")
+    endif()
+    if(NOT EXISTS "${PLUME_SWITCH_UAM_DIR}/CMakeLists.txt")
+        message(FATAL_ERROR "PLUME_DEKO3D needs PLUME_SWITCH_UAM_DIR (uam's source): ${PLUME_SWITCH_UAM_DIR}")
+    endif()
+    if(DEFINED PLUME_SWITCH_DEVKITPRO AND NOT "${PLUME_SWITCH_DEVKITPRO}" STREQUAL "")
+        set(_plume_dkp "${PLUME_SWITCH_DEVKITPRO}")
+    else()
+        set(_plume_dkp "${DEVKITPRO}")
+    endif()
+    if(NOT TARGET uamlib)
+        set(NX_ROOT "${_plume_dkp}/libnx")
+        add_subdirectory("${PLUME_SWITCH_UAM_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/uam")
+    endif()
+    target_sources(plume PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/plume_deko3d.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/plume_deko3d_commands.cpp")
+    target_compile_definitions(plume PUBLIC PLUME_DEKO3D=1)
+    target_include_directories(plume PRIVATE "${PLUME_SWITCH_UAM_DIR}")
+    # uam's Mesa (19) and the static NVK's Mesa define functions with the same
+    # names: uam's strong symbols are made local, its API (uam::*) stays global.
+    set(PLUME_DEKO3D_BIN "${_plume_dkp}/devkitA64/bin")
+    set(PLUME_DEKO3D_HOST_EXE "")
+    if(CMAKE_HOST_WIN32)
+        set(PLUME_DEKO3D_HOST_EXE ".exe")
+    endif()
+    set(plume_uam_local "${CMAKE_CURRENT_BINARY_DIR}/uam_local.o")
+    add_custom_command(
+        OUTPUT "${plume_uam_local}"
+        COMMAND "${CMAKE_COMMAND}"
+                "-DLD=${PLUME_DEKO3D_BIN}/aarch64-none-elf-ld${PLUME_DEKO3D_HOST_EXE}"
+                "-DNM=${PLUME_DEKO3D_BIN}/aarch64-none-elf-nm${PLUME_DEKO3D_HOST_EXE}"
+                "-DOBJCOPY=${PLUME_DEKO3D_BIN}/aarch64-none-elf-objcopy${PLUME_DEKO3D_HOST_EXE}"
+                "-DARCHIVE=$<TARGET_FILE:uamlib>" "-DOUT=${plume_uam_local}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/plume_uam_localize.cmake"
+        DEPENDS uamlib "${CMAKE_CURRENT_SOURCE_DIR}/plume_uam_localize.cmake"
+        COMMENT "uam with its strong symbols local but its API (uam_local.o)"
+        VERBATIM)
+    add_custom_target(plume_uam_local DEPENDS "${plume_uam_local}")
+    add_dependencies(plume plume_uam_local)
+    target_link_libraries(plume PUBLIC "${plume_uam_local}" "${_plume_dkp}/libnx/lib/libdeko3d.a" nx)
+    message(STATUS "Plume - deko3d back end: ON (uam ${PLUME_SWITCH_UAM_DIR})")
+endif()
+
 if(PLUME_SDL_VULKAN_ENABLED)
     target_compile_definitions(plume PUBLIC PLUME_SDL_VULKAN_ENABLED)
     target_include_directories(plume PUBLIC ${SDL2_INCLUDE_DIRS})

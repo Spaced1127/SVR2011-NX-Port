@@ -534,6 +534,15 @@ void Svr2011App::OnPreSetup(rex::RuntimeConfig& config) {
     config.gpu_plugin = "xenos";
     REXLOG_WARN("settings: no gpu_plugin (could {} be read?) - using xenos", g_config_path.string());
   }
+#if defined(__SWITCH__)
+  // deko3d draws and presents its own frames: the Vulkan presenter must not
+  // open a swapchain on the same NWindow (two swapchains on one NWindow
+  // corrupt each other's buffers).
+  if (rex::cvar::Query<std::string>("native_backend") == "deko3d") {
+    rex::cvar::SetFlagByName("switch_vulkan_surface", "false");
+    REXLOG_INFO("graphics: native_backend=deko3d - the Vulkan presenter has no swapchain");
+  }
+#endif
 #if defined(__ANDROID__)
   // The phone draws natively on Vulkan only: a settings file with another
   // value ("any", seen in a player's report: "no backend for the emulator's

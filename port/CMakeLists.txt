@@ -217,6 +217,9 @@ elseif(REXGLUE_PLATFORM_SWITCH)
     # Horizon has no POSIX signals; the SDK's Switch exception handler and
     # crash hooks own the fatal path. The game-side crash hooks are stubs.
     list(APPEND SVR2011_SOURCES src/posix_stubs.cpp src/switch_stubs.cpp)
+    # deko3d backend (plume's deko3d back end + uam, built by the plume
+    # subdirectory with PLUME_DEKO3D=ON).
+    list(APPEND SVR2011_SOURCES src/native/backend_deko3d.cpp)
 else()
     list(APPEND SVR2011_SOURCES src/posix_stubs.cpp src/crash_report_posix.cpp)
 endif()

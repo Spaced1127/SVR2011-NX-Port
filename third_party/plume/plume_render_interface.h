@@ -144,7 +144,8 @@ namespace plume {
         virtual void setDepthBias(float depthBias, float depthBiasClamp, float slopeScaledDepthBias) = 0;
         // [svr2011] For pipelines created with dynamicStencilReferenceEnabled / dynamicBlendFactorEnabled.
         virtual void setStencilReference(uint32_t stencilReference) = 0;
-        virtual void setBlendFactor(const float blendFactor[4]) = 0;
+        // deko3d keeps the blend constant in the pipeline; a backend without it can ignore this.
+        virtual void setBlendFactor(const float blendFactor[4]) { (void)blendFactor; }
         virtual void clearColor(uint32_t attachmentIndex = 0, RenderColor colorValue = RenderColor(), const RenderRect *clearRects = nullptr, uint32_t clearRectsCount = 0) = 0;
         virtual void clearDepthStencil(bool clearDepth = true, bool clearStencil = true, float depthValue = 1.0f, uint32_t stencilValue = 0, const RenderRect *clearRects = nullptr, uint32_t clearRectsCount = 0) = 0;
         virtual void copyBufferRegion(RenderBufferReference dstBuffer, RenderBufferReference srcBuffer, uint64_t size) = 0;
@@ -212,7 +213,12 @@ namespace plume {
         virtual void executeCommandLists(const RenderCommandList **commandLists, uint32_t commandListCount, RenderCommandSemaphore **waitSemaphores = nullptr, uint32_t waitSemaphoreCount = 0, RenderCommandSemaphore **signalSemaphores = nullptr, uint32_t signalSemaphoreCount = 0, RenderCommandFence *signalFence = nullptr) = 0;
         virtual void waitForCommandFence(RenderCommandFence *fence) = 0;
         // [svr2011] False if the fence isn't signaled within timeoutMs (it can be waited for again).
-        virtual bool waitForCommandFenceTimeout(RenderCommandFence *fence, uint32_t timeoutMs) = 0;
+        // A backend without a timed wait waits normally.
+        virtual bool waitForCommandFenceTimeout(RenderCommandFence *fence, uint32_t timeoutMs) {
+            (void)timeoutMs;
+            waitForCommandFence(fence);
+            return true;
+        }
 
         // Concrete implementation shortcuts.
         inline void executeCommandLists(const RenderCommandList *commandList, RenderCommandFence *signalFence = nullptr) {
@@ -229,6 +235,13 @@ namespace plume {
     struct RenderQueryPool {
         virtual ~RenderQueryPool() { }
         virtual void queryResults() = 0;
+        // The results of queries [0, count) only; false when the backend reads the whole pool.
+        virtual bool queryResults(uint32_t count) {
+            (void)count;
+            queryResults();
+            return false;
+        }
+        virtual bool partialResults() const { return false; }
         virtual const uint64_t *getResults() const = 0;
         virtual uint32_t getCount() const = 0;
     };
@@ -259,6 +272,9 @@ namespace plume {
         virtual RenderSampleCounts getSampleCountsSupported(RenderFormat format) const = 0;
         virtual bool beginCapture() = 0;
         virtual bool endCapture() = 0;
+        // Writes the persistent pipeline cache configured by the backend; false when there is
+        // none, nothing new, or on error.
+        virtual bool savePipelineCache() { return false; }
     };
 
     struct RenderInterface {

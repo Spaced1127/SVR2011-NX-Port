@@ -20,6 +20,12 @@
 
 REXCVAR_DECLARE(bool, input_xbox_layout);  // defined in switch_input_driver.cpp
 
+// A renderer that presents on its own (deko3d) owns the default NWindow; the
+// Vulkan presenter must not open a swapchain on it too. Set by the app when
+// native_backend=deko3d.
+REXCVAR_DEFINE_BOOL(switch_vulkan_surface, true, "UI/Window",
+                    "Switch: let the Vulkan presenter open a swapchain on the default NWindow");
+
 namespace rex::ui {
 
 bool ViNWindowSurface::GetSizeImpl(uint32_t& width_out, uint32_t& height_out) const {
@@ -126,6 +132,10 @@ void WindowSwitch::PerformClose() {
 }
 
 std::unique_ptr<Surface> WindowSwitch::CreateSurfaceImpl(Surface::TypeFlags allowed_types) {
+  if (!REXCVAR_GET(switch_vulkan_surface)) {
+    // deko3d presents on the NWindow itself (the renderer's own swapchain).
+    return nullptr;
+  }
   if (!nwindow_ || !(allowed_types & Surface::kTypeFlag_ViNWindow)) {
     return nullptr;
   }
