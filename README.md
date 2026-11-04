@@ -7,7 +7,8 @@ This is a native Nintendo Switch homebrew port of the Xbox 360 version of
 is statically recompiled to C++ with [ReXGlue](https://github.com/rexglue/rexglue-sdk)
 and compiled for the Switch with devkitA64/libnx. The native renderer draws
 through Vulkan on [Mesa NVK](https://github.com/danfromtico/mesa-switch); a
-deko3d backend is planned for the performance pass.
+deko3d backend is planned for the performance pass. The deko3d work is
+tracked in [docs/DEKO3D.md](docs/DEKO3D.md).
 
 The port is based on the public
 [WWE SmackDown vs. Raw 2011 PC port](https://github.com/KaikoClanworth1/wwe-svr2011-pc)
