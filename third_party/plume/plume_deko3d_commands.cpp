@@ -319,39 +319,41 @@ namespace plume {
 
     void Deko3DCommandList::bindTextures() {
         const Deko3DGraphicsPipeline *p = graphicsPipeline;
-        DkGpuAddr addr = 0;
+        DkGpuAddr baseAddr = 0;
+        uint32_t sharedOffset = 0, ownOffset = 0;
+        bool haveBase = false;
         if (graphicsUboValid & (1u << SharedUboSlot)) {
             // Compact tables: the shared constants are a UBO of their own.
-            addr = graphicsUbo[SharedUboSlot].addr;
+            baseAddr = graphicsUbo[SharedUboSlot].addr;
+            haveBase = true;
         } else if (graphicsSsboValid & 1u) {
-            // The native renderer's non-compact layout: the shared constants
-            // live inside the storage buffer at set 2 binding 0 (the frame's
-            // upload ring). The push constants carry their byte offset (the
-            // third of the four: vertex, pixel, shared, own).
-            uint32_t sharedOffset = 0;
+            // The native renderer's non-compact layout: the constants live in
+            // the storage buffer at set 2 binding 0 (the frame's upload ring).
+            // The push constants carry the shared and own byte offsets (the
+            // third and fourth of the four: vertex, pixel, shared, own).
             memcpy(&sharedOffset, graphicsPush + 8, 4);
-            if (!sharedOffset)
-                return;
-            addr = graphicsSsbo[0].addr + sharedOffset;
-        } else {
-            return;
+            memcpy(&ownOffset, graphicsPush + 12, 4);
+            baseAddr = graphicsSsbo[0].addr;
+            haveBase = true;
         }
+        if (!haveBase)
+            return;
         // banjo-nx (2026-10-19, render-thread proposal 5): pushed shared constants: the renderer's copy.
         if (sharedWords) {
             sharedCpu = sharedWords;
-            sharedBase = addr;
+            sharedBase = baseAddr;
             sharedSize = sharedWordsSize;
-        } else if (!sharedCpu || addr < sharedBase || addr >= sharedBase + sharedSize) {
-            if (!device->findBuffer(addr, sharedBase, sharedSize, sharedCpu)) {
+        } else if (!sharedCpu || baseAddr < sharedBase || baseAddr >= sharedBase + sharedSize) {
+            if (!device->findBuffer(baseAddr, sharedBase, sharedSize, sharedCpu)) {
                 sharedCpu = nullptr;
                 static std::atomic<uint32_t> logged{0};
                 if (logged.fetch_add(1) < 8)
-                    logf("bound textures: no buffer holds the shared constants at 0x%" PRIx64, addr);
+                    logf("bound textures: no buffer holds the constants at 0x%" PRIx64, baseAddr);
                 return;
             }
         }
-        const uint8_t *words = sharedCpu + (addr - sharedBase);
-        const uint32_t limit = uint32_t(sharedBase + sharedSize - addr);
+        const uint8_t *words = sharedCpu + (baseAddr - sharedBase);
+        const uint32_t limit = uint32_t(sharedBase + sharedSize - baseAddr);
         for (int st = 0; st < 3; st++) {
             const auto &bindings = p->texBindings[st];
             if (bindings.empty())
@@ -361,11 +363,12 @@ namespace plume {
             bool same = n == boundTexCount[st];
             for (uint32_t k = 0; k < n; k++) {
                 const Deko3DShaderUsage::TexBinding &b = bindings[k];
+                const uint32_t block = b.own ? ownOffset : sharedOffset;
                 uint32_t texture = 0, sampler = 0;
-                if (b.textureWord + 4u <= limit)
-                    memcpy(&texture, words + b.textureWord, 4);
-                if (b.samplerWord != Deko3DShaderUsage::SamplerNone && b.samplerWord + 4u <= limit)
-                    memcpy(&sampler, words + b.samplerWord, 4);
+                if (block + b.textureWord + 4u <= limit)
+                    memcpy(&texture, words + block + b.textureWord, 4);
+                if (b.samplerWord != Deko3DShaderUsage::SamplerNone && block + b.samplerWord + 4u <= limit)
+                    memcpy(&sampler, words + block + b.samplerWord, 4);
                 handles[k] = (texture & 0xFFFFFu) | ((sampler & 0xFFFu) << 20);
                 same = same && handles[k] == boundTex[st][k];
             }
@@ -689,6 +692,10 @@ namespace plume {
 
     void Deko3DCommandList::setViewports(const RenderViewport *vps, uint32_t count) {
         count = std::min<uint32_t>(count, 16);
+        // [svr2011] Our shaders were built for Vulkan (-fvk-invert-y): their
+        // clip-space Y is the opposite of deko3d's upper-left origin, so every
+        // viewport gets the flipped transform (unless the option is off).
+        const bool flipAll = Deko3DGetOptions().vulkanY;
         bool flipped = false;
         for (uint32_t i = 0; i < count; i++) {
             const RenderViewport &v = vps[i];
@@ -701,13 +708,13 @@ namespace plume {
             d.height = std::fabs(v.height);
             d.near = v.minDepth;
             d.far = v.maxDepth;
-            flipped = flipped || v.height < 0.0f;
+            flipped = flipped || flipAll || v.height < 0.0f;
         }
         viewportCount = count;
         dkCmdBufSetViewports(cmd, 0, viewports, count);
         if (flipped) {
             for (uint32_t i = 0; i < count; i++) {
-                if (vps[i].height >= 0.0f)
+                if (!flipAll && vps[i].height >= 0.0f)
                     continue;
                 // deko3d's transform with the upper-left origin: scaleY = -h/2, translateY = y + h/2 (y and h of the
                 // positive viewport). The flipped one mirrors it: +h/2 around the same centre.
@@ -991,6 +998,21 @@ namespace plume {
                 dkCmdBufCopyImage(cmd, &sv, &r, &dv, &r, 0);
             }
         }
+        invalidateZcullAfterCopy(dt);
+    }
+
+    void Deko3DCommandList::blitTexture(const RenderTexture *dst, const RenderTexture *src) {
+        const Deko3DTexture *dt = static_cast<const Deko3DTexture *>(dst);
+        const Deko3DTexture *st = static_cast<const Deko3DTexture *>(src);
+        if (!dt || !st || !dt->valid || !st->valid)
+            return;
+        DkImageView dv = subresourceView(dt, 0, 0);
+        DkImageView sv = subresourceView(st, 0, 0);
+        const DkImageRect srect = {0, 0, 0, mipDim(st->desc.width, 0), mipDim(st->desc.height, 0), 1};
+        const DkImageRect drect = {0, 0, 0, mipDim(dt->desc.width, 0), mipDim(dt->desc.height, 0), 1};
+        flushBarriers();
+        GetDeko3DStats().copyBlit.store(GetDeko3DStats().copyBlit.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
+        dkCmdBufBlitImage(cmd, &sv, &srect, &dv, &drect, DkBlitFlag_FilterLinear, 0);
         invalidateZcullAfterCopy(dt);
     }
 
@@ -1345,7 +1367,14 @@ namespace plume {
             return true;
         // sa2-nx (2026-10-20, 1.0.3.1): another size wanted (docking or undocking).
         const uint64_t wanted = g_wantedSwapChainSize.load(std::memory_order_relaxed);
-        return wanted && (uint32_t(wanted >> 32) != width || uint32_t(wanted) != height);
+        if (wanted)
+            return uint32_t(wanted >> 32) != width || uint32_t(wanted) != height;
+        // [svr2011] Without a forced size, follow the NWindow (dock/undock).
+        uint32_t w = 0, h = 0;
+        NWindow *window = desc.renderWindow ? desc.renderWindow : nwindowGetDefault();
+        if (window && nwindowGetDimensions(window, &w, &h) == 0 && w >= 64 && h >= 64)
+            return w != width || h != height;
+        return false;
     }
 
     void Deko3DSwapChain::setVsyncEnabled(bool vsyncEnabled) {

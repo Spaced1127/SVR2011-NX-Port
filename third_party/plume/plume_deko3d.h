@@ -133,10 +133,13 @@ namespace plume {
         uint32_t uboMask = 0;
         uint32_t ssboMask = 0;
         bool textures = false;
-        // Bound textures (the game shaders' texb): binding k's handle is made from two words of the shared constants
-        // (UBO binding 2): the texture word's low 20 bits and the sampler word's high 12 (SamplerNone: sampler 0).
+        // Bound textures: binding k's handle is made from two words of the
+        // constants - the shared block (texb) or the renderer's own block
+        // (ownb): the texture word's low 20 bits and the sampler word's high
+        // 12 (SamplerNone: sampler 0).
         struct TexBinding {
             uint16_t textureWord = 0, samplerWord = 0;
+            bool own = false;
         };
         static constexpr uint16_t SamplerNone = 0xFFFF;
         std::vector<TexBinding> texBindings;
@@ -409,6 +412,9 @@ namespace plume {
         void copyTextureRegion(const RenderTextureCopyLocation &dstLocation, const RenderTextureCopyLocation &srcLocation, uint32_t dstX, uint32_t dstY, uint32_t dstZ, const RenderBox *srcBox) override;
         void copyBuffer(const RenderBuffer *dstBuffer, const RenderBuffer *srcBuffer) override;
         void copyTexture(const RenderTexture *dstTexture, const RenderTexture *srcTexture) override;
+        // [svr2011] The frame to the swapchain image, scaled if their sizes
+        // differ (the 2D engine's linear blit).
+        void blitTexture(const RenderTexture *dstTexture, const RenderTexture *srcTexture);
         void resolveTexture(const RenderTexture *dstTexture, const RenderTexture *srcTexture) override;
         void resolveTextureRegion(const RenderTexture *dstTexture, uint32_t dstX, uint32_t dstY, const RenderTexture *srcTexture, const RenderRect *srcRect, RenderResolveMode resolveMode) override;
         void buildBottomLevelAS(const RenderAccelerationStructure *dstAccelerationStructure, RenderBufferReference scratchBuffer, const RenderBottomLevelASBuildInfo &buildInfo) override;
@@ -691,6 +697,9 @@ namespace plume {
         // waits for the work before it but keeps the texture cache: only a read after a write needs it invalidated,
         // and that read's own transition does it.
         bool leanBarriers = false;
+        // [svr2011] The renderer's shaders were built for Vulkan with
+        // -fvk-invert-y, so flip the viewport Y (deko3d's origin is upper-left).
+        bool vulkanY = false;
     };
     void Deko3DSetOptions(const Deko3DOptions &options);
     // banjo-nx (2026-10-19, render-thread proposal 13): read inline (barriers() reads it per call).

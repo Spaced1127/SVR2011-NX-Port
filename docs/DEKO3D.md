@@ -66,10 +66,11 @@ backend for it. plume's deko3d backend is MIT; uam is zlib/MIT/MPL-2.0.
 - **Shader conversion works on every game shader**: `spirv-cross` Vulkan
   GLSL -> `tools/deko3d_glsl.py` produces the `// banjo-dk` layout with
   per-draw `dk_tex_bK` textures (2D, 3D and cube) and `texb=` shared-constant
-  offsets. The renderer's own shaders (present, FSR 1, debug) use bindless
-  `dkh` handles from their own-constants table indices.
-  `tools/deko3d_shaders.py` turns `shaders.spv.pak` into `shaders.dk.pak`
-  (BDK3 blobs for uam): 926 shaders converted, 0 skipped.
+  offsets. The renderer's own shaders (present, FSR 1, debug) use the same
+  bound-sampler path with `ownb=` own-constant offsets, so every shader is
+  compiled by uam the same way. `tools/deko3d_shaders.py` turns
+  `shaders.spv.pak` into `shaders.dk.pak` (BDK3 blobs for uam): 926 shaders
+  converted, 0 skipped.
 - **Non-compact tables**: deko3d uses the renderer's big texture/sampler
   tables (set 0/1) as one image descriptor set and one sampler set. The
   renderer writes global texture indices for deko3d (the 2D, 3D and cube

@@ -174,14 +174,13 @@ def convert(src: str, stage: str) -> str:
     text = re.sub(r"layout\(push_constant,\s*std430\)\s*uniform",
                   f"layout(std140, binding = {PUSH_UBO_BINDING}) uniform", text)
 
-    bindings: dict[tuple[str, int, int | None], int] = {}
+    bindings: dict[tuple[bool, str, int, int | None], int] = {}
     declarations: list[str] = []
-    own_bindless = False
 
-    def bind(stype: str, t_off: int | None, s_off: int | None) -> str:
+    def bind(stype: str, own: bool, t_off: int | None, s_off: int | None) -> str:
         if t_off is None:
-            raise Unsupported("texture/sampler not read from the shared constants")
-        key = (stype, t_off, s_off)
+            raise Unsupported("texture/sampler not read from the constants")
+        key = (own, stype, t_off, s_off)
         if key not in bindings:
             bindings[key] = len(bindings)
             declarations.append(
@@ -220,14 +219,13 @@ def convert(src: str, stage: str) -> str:
             t_src = word_source(texpr, temps, own_temps)
             s_src = word_source(sexpr, temps, own_temps)
             out.append(text[pos:start])
-            if t_src and t_src[0] == "own" and s_src and s_src[0] == "own":
-                # The renderer's own shaders (present / FSR): the own
-                # constants hold real table indices, so the handle is made
-                # from them at runtime.
-                own_bindless = True
-                out.append(f"{stype}(dkh({texpr}, {sexpr}))")
+            if t_src and s_src and t_src[0] == s_src[0]:
+                # Shared constants (the game's tables) or the renderer's own
+                # constants (present / FSR): both are bound samplers, read by
+                # the back end from the matching constant block.
+                out.append(bind(stype, t_src[0] == "own", t_src[1], s_src[1]))
             else:
-                out.append(bind(stype,
+                out.append(bind(stype, False,
                                 t_src[1] if t_src and t_src[0] == "shared" else None,
                                 s_src[1] if s_src and s_src[0] == "shared" else None))
             pos = close_i + 1
@@ -249,12 +247,10 @@ def convert(src: str, stage: str) -> str:
             inner = text[ob + 1:cb]
             src = word_source(inner, temps, own_temps)
             out.append(text[pos:start])
-            if src and src[0] == "own":
-                # (texelFetch / textureSize on the renderer's own texture)
-                own_bindless = True
-                out.append(f"{stype}(dkh({inner}, 0u))")
+            if src:
+                out.append(bind(stype, src[0] == "own", src[1], None))
             else:
-                out.append(bind(stype, src[1] if src and src[0] == "shared" else None, None))
+                out.append(bind(stype, False, None, None))
             pos = cb + 1
         text = "".join(out)
 
@@ -288,21 +284,17 @@ def convert(src: str, stage: str) -> str:
     meta = f"// banjo-dk ubo=0x{ubo_mask:x} ssbo=0x{ssbo_mask:x} tex={1 if has_textures else 0}"
     if vin:
         meta += " vin=" + ",".join(str(v) for v in vin)
-    if bindings:
-        meta += " texb=" + ",".join(
-            f"{k}:{t}:{65535 if s is None else s}"
-            for (_stype, t, s), k in sorted(bindings.items(), key=lambda kv: kv[1]))
+    shared_bindings, own_bindings = [], []
+    for (is_own, _stype, t, s), k in sorted(bindings.items(), key=lambda kv: kv[1]):
+        entry = f"{k}:{t}:{65535 if s is None else s}"
+        (own_bindings if is_own else shared_bindings).append(entry)
+    if shared_bindings:
+        meta += " texb=" + ",".join(shared_bindings)
+    if own_bindings:
+        meta += " ownb=" + ",".join(own_bindings)
 
     lines = text.split("\n")
-    insert = [meta]
-    if own_bindless:
-        # A handle made from the own constants' table indices (dkh), as the
-        # game shaders' handles are.
-        insert += [
-            "#extension GL_ARB_bindless_texture : require",
-            "#define dkh(t, s) uvec2((uint(t) & 0xFFFFFu) | ((uint(s) & 0xFFFu) << 20u), 0u)",
-        ]
-    insert += declarations
+    insert = [meta] + declarations
     lines[1:1] = insert
     return "\n".join(lines)
 

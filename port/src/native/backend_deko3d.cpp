@@ -31,6 +31,14 @@ class Deko3DBackend final : public Backend {
 
   std::unique_ptr<plume::RenderInterface> CreateInterface(std::string* device_name) override {
     *device_name = "deko3d";
+    // The renderer's shaders were built for Vulkan (-fvk-invert-y): deko3d's
+    // viewport transform must flip Y to match.
+    plume::Deko3DOptions options = plume::Deko3DGetOptions();
+    options.vulkanY = true;
+    plume::Deko3DSetOptions(options);
+    // uam's compile errors and the back end's messages go to the app's log
+    // (stderr on the console would be lost).
+    plume::SetDeko3DLogCallback([](const char* message) { REXLOG_ERROR("deko3d: {}", message); });
     return plume::CreateDeko3DInterface();
   }
 
@@ -61,28 +69,29 @@ class Deko3DBackend final : public Backend {
   void PublishFrame(const std::shared_ptr<plume::RenderTexture>& image, uint32_t width,
                     uint32_t height, plume::RenderCommandFence* fence) override {
     if (!queue_ || !image || !width || !height) return;
-    // The NWindow's size follows the display (720p handheld, 1080p docked);
-    // the swapchain images are made at the frame image's size.
-    plume::Deko3DSetSwapChainSize(width, height);
     if (!swapchain_) {
       NWindow* window = nwindowGetDefault();
       if (!window || !nwindowIsValid(window)) {
         REXLOG_ERROR("deko3d: no default NWindow for the swapchain");
         return;
       }
+      // The swapchain is the NWindow's size (the display's); a frame of a
+      // different size is scaled into it below.
       plume::RenderSwapChainDesc desc(window, kSwapChainFormat, 2);
       swapchain_ = queue_->createSwapChain(desc);
       if (!swapchain_) {
         REXLOG_ERROR("deko3d: could not create the swapchain");
         return;
       }
-      REXLOG_INFO("deko3d: swapchain {}x{}", swapchain_->getWidth(), swapchain_->getHeight());
+      REXLOG_INFO("deko3d: swapchain {}x{}, frame {}x{}", swapchain_->getWidth(), swapchain_->getHeight(), width,
+                  height);
     } else if (swapchain_->needsResize()) {
       if (!swapchain_->resize()) {
         REXLOG_ERROR("deko3d: could not resize the swapchain");
         return;
       }
-      REXLOG_INFO("deko3d: swapchain {}x{}", swapchain_->getWidth(), swapchain_->getHeight());
+      REXLOG_INFO("deko3d: swapchain {}x{}, frame {}x{}", swapchain_->getWidth(), swapchain_->getHeight(), width,
+                  height);
     }
     // The renderer's frame submission signals this fence; the copy must not
     // read the image before it.
@@ -95,7 +104,13 @@ class Deko3DBackend final : public Backend {
     auto copy_fence = device_->createCommandFence();
     if (!list || !copy_fence) return;
     list->begin();
-    list->copyTexture(dst, image.get());
+    if (swapchain_->getWidth() != width || swapchain_->getHeight() != height) {
+      // The NWindow is a different size from the frame: the 2D engine scales
+      // it (a plain copy would leave the rest of the swapchain undefined).
+      static_cast<plume::Deko3DCommandList*>(list.get())->blitTexture(dst, image.get());
+    } else {
+      list->copyTexture(dst, image.get());
+    }
     list->end();
     queue_->executeCommandLists(list.get(), copy_fence.get());
     queue_->waitForCommandFence(copy_fence.get());

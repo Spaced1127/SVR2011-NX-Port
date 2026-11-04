@@ -1135,19 +1135,27 @@ namespace plume {
         usage.ssboMask = uint32_t(strtoul(field("ssbo=").c_str(), nullptr, 16));
         usage.textures = field("tex=") == "1";
         usage.txqMask = uint32_t(strtoul(field("txq=").c_str(), nullptr, 16));  // banjo-nx (2026-10-19)
-        // texb=k:textureWord:samplerWord,... in binding order
-        const std::string texb = field("texb=");
-        size_t q = 0;
-        while (q < texb.size()) {
-            const size_t comma = texb.find(',', q);
-            const std::string item = texb.substr(q, comma == std::string::npos ? std::string::npos : comma - q);
-            unsigned k = 0, t = 0, s = 0;
-            if (sscanf(item.c_str(), "%u:%u:%u", &k, &t, &s) == 3 && k == usage.texBindings.size())
-                usage.texBindings.push_back({uint16_t(t), uint16_t(s)});
-            if (comma == std::string::npos)
-                break;
-            q = comma + 1;
-        }
+        // texb=k:textureWord:samplerWord,... (shared constants) and
+        // ownb=... (the renderer's own constants), indexed by binding k.
+        auto parseBindings = [&](const char *key, bool own) {
+            const std::string list = field(key);
+            size_t q = 0;
+            while (q < list.size()) {
+                const size_t comma = list.find(',', q);
+                const std::string item = list.substr(q, comma == std::string::npos ? std::string::npos : comma - q);
+                unsigned k = 0, t = 0, s = 0;
+                if (sscanf(item.c_str(), "%u:%u:%u", &k, &t, &s) == 3) {
+                    if (usage.texBindings.size() <= k)
+                        usage.texBindings.resize(k + 1);
+                    usage.texBindings[k] = {uint16_t(t), uint16_t(s), own};
+                }
+                if (comma == std::string::npos)
+                    break;
+                q = comma + 1;
+            }
+        };
+        parseBindings("texb=", false);
+        parseBindings("ownb=", true);
         const std::string vin = field("vin=");
         size_t p = 0;
         while (p < vin.size()) {
