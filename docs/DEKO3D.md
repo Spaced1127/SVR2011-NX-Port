@@ -84,13 +84,24 @@ backend for it. plume's deko3d backend is MIT; uam is zlib/MIT/MPL-2.0.
   swapchain on the default NWindow; the deko3d backend owns it and presents
   the frame image 1:1 (RGBA8, 720p handheld / the display resolution docked).
   The app's Vulkan/ImGui overlays are not drawn on this path yet.
-- **Performance**: 35.2 fps in-ring on the overclocked test console (draw
-  6 ms, submit 0.05 ms; the NVK baseline was ~20 fps). FSR 1 is available
-  with `native_upscale="fsr1"`; presets 4 (40% of the window height) and 5
-  (33%) go below the old 50% floor, with EASU/RCAS upscaling to the window,
-  for more headroom during attacks and on a stock console.
-- **Still open**: hardware test (no Switch in this environment), a persistent
-  DKSH cache, and performance measurement against the NVK baseline.
+- **Performance**: measured on hardware, in-ring, 60 Hz game logic:
+
+  | Build | CPU / GPU / RAM | In-ring | draw | span |
+  |---|---|---|---|---|
+  | NVK (main) | 1785 / 921.6 / 1866 MHz | ~20 fps | 8.6 ms | 49.8 ms |
+  | deko3d | 1963.5 / 998.4 / 1866 MHz | **35 fps** | 6.0 ms | 29.0 ms |
+  | deko3d | stock 1020 / 307.2 / 1331.2 MHz | **33 fps** | 6.3 ms | 30.2 ms |
+  | deko3d, `frame_rate=30` | 1963.5 / 998.4 / 1866 MHz | 30 fps | 7.7 ms | 33.3 ms |
+
+  The menus run at 60 fps; heavy entrances (878–924 draws) drop to 15–21 fps.
+  `frame_rate=30` is worse than 60 because the game's 30 Hz world step does
+  twice the work per frame. FSR 1 (`native_upscale="fsr1"`, quality 4) is
+  active at a 288p scene but does not change the CPU-limited fps. `-O3` for
+  the generated code did not move the numbers; PGO instrumentation crashes at
+  startup on the Switch and is not shipped.
+- **Still open**: the app's Vulkan/ImGui overlays are off on the deko3d path;
+  a persistent DKSH cache; a Clang cross-build of the generated code (the
+  remaining codegen experiment).
 
 ## Building and testing this branch
 
@@ -114,6 +125,34 @@ Copy `svr2011.nro` and `native_shaders/shaders.dk.pak` to the SD card. The
 deko3d path is selected by `native_backend = "deko3d"` (the default on the
 Switch); `native_backend = "auto"` keeps the emulator's Vulkan backend for
 comparison.
+
+## PGO for the recompiled game code
+
+The generated game code is most of the CPU time. `-O3` alone did not move it;
+profile-guided optimization is the next step. The same build tree must be used
+for both passes.
+
+1. Instrumented NRO. The profile directory is a console path (`sdmc:`):
+
+```bash
+SVR2011_PGO=generate SVR2011_PGO_DIR="sdmc:/switch/svr2011/pgo" \
+  bash out/build_deko3d.sh
+```
+
+Copy that NRO to the SD, boot it, play a representative match (menus,
+entrance, in-ring, attacks), and close the app cleanly so libgcov writes the
+`.gcda` files to `sdmc:/switch/svr2011/pgo`.
+
+2. Copy the `pgo` folder from the SD to the host, then rebuild with the same
+build tree and the host path:
+
+```bash
+SVR2011_PGO=use SVR2011_PGO_DIR="/mnt/h/Projects/svr2011-sd2/pgo" \
+  bash out/build_deko3d.sh
+```
+
+The second NRO is the optimized one. Keep the instrumented NRO for another
+profile run if the first is not representative.
 
 ## Milestones
 

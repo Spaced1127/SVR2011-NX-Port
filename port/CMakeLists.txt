@@ -21,6 +21,15 @@ endif()
 
 include(generated/rexglue.cmake)
 
+# Profile-guided optimization of the recompiled game code. The generated code
+# is the bulk of the CPU time; PGO is the next step after -O3.
+#   generate: an instrumented NRO (profile counters); the .gcda files go to
+#             SVR2011_PGO_DIR on the console (e.g. sdmc:/switch/svr2011/pgo).
+#   use:      compile with the .gcda files copied to SVR2011_PGO_DIR on the
+#             host; the same build tree is required.
+set(SVR2011_PGO "off" CACHE STRING "Profile-guided optimization: off, generate, use")
+set(SVR2011_PGO_DIR "" CACHE STRING "PGO profile directory (generate: console path; use: host path)")
+
 set(SVR2011_SOURCES
     src/main.cpp
     src/svr2011_app.cpp
@@ -313,6 +322,21 @@ if(SVR2011_DEBUG_SUITE)
 endif()
 
 rexglue_setup_target(svr2011 GPU_PLUGINS xenos)
+
+# The generated game code is most of the CPU time; the SDK's default for it is
+# -O2, while the Android build uses -O3. Keep -O3 after the SDK's flag.
+if(TARGET svr2011_recomp)
+    target_compile_options(svr2011_recomp PRIVATE -O3)
+    if(SVR2011_PGO STREQUAL "generate")
+        target_compile_options(svr2011_recomp PRIVATE -fprofile-generate=${SVR2011_PGO_DIR})
+    elseif(SVR2011_PGO STREQUAL "use")
+        target_compile_options(svr2011_recomp PRIVATE -fprofile-use=${SVR2011_PGO_DIR} -fprofile-correction)
+    endif()
+endif()
+if(SVR2011_PGO STREQUAL "generate")
+    # libgcov: the counters' runtime, which writes the .gcda files.
+    target_link_options(svr2011 PRIVATE -fprofile-generate=${SVR2011_PGO_DIR})
+endif()
 # The SDK stages the GPU plugin (loaded at run time, never linked) only when
 # the exe relinks: a change to the plugin alone would leave a stale copy
 # beside the exe (and in Game Files / the release). Stage it on every build.

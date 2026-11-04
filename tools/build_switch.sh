@@ -132,6 +132,8 @@ build_switch() {
     -DPLUME_SWITCH_UAM_DIR="${REPO_ROOT}/third_party/uam" \
     -DPLUME_SWITCH_DEVKITPRO="${DEVKITPRO}" \
     -DPLUME_SWITCH_NVK_LIBRARY="${NVK_SDK}/lib/libvulkan.a" \
+    -DSVR2011_PGO="${SVR2011_PGO:-off}" \
+    -DSVR2011_PGO_DIR="${SVR2011_PGO_DIR:-}" \
     -DCMAKE_PREFIX_PATH="${PORTLIBS_PREFIX}"
   cmake --build "${REPO_ROOT}/out/switch" -j "${JOBS}"
 }
