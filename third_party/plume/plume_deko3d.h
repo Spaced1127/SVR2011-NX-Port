@@ -414,7 +414,7 @@ namespace plume {
         void copyTexture(const RenderTexture *dstTexture, const RenderTexture *srcTexture) override;
         // [svr2011] The frame to the swapchain image, scaled if their sizes
         // differ (the 2D engine's linear blit).
-        void blitTexture(const RenderTexture *dstTexture, const RenderTexture *srcTexture);
+        void blitTexture(const RenderTexture *dstTexture, const RenderTexture *srcTexture) override;
         void resolveTexture(const RenderTexture *dstTexture, const RenderTexture *srcTexture) override;
         void resolveTextureRegion(const RenderTexture *dstTexture, uint32_t dstX, uint32_t dstY, const RenderTexture *srcTexture, const RenderRect *srcRect, RenderResolveMode resolveMode) override;
         void buildBottomLevelAS(const RenderAccelerationStructure *dstAccelerationStructure, RenderBufferReference scratchBuffer, const RenderBottomLevelASBuildInfo &buildInfo) override;

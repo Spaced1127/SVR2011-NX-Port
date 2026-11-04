@@ -70,7 +70,9 @@ backend for it. plume's deko3d backend is MIT; uam is zlib/MIT/MPL-2.0.
   bound-sampler path with `ownb=` own-constant offsets, so every shader is
   compiled by uam the same way. `tools/deko3d_shaders.py` turns
   `shaders.spv.pak` into `shaders.dk.pak` (BDK3 blobs for uam): 926 shaders
-  converted, 0 skipped.
+  converted, 0 skipped. The converter also rewrites Vulkan's
+  `gl_VertexIndex` / `gl_InstanceIndex` to Mesa's `gl_VertexID` /
+  `gl_InstanceID`, which uam's GLSL frontend expects.
 - **Non-compact tables**: deko3d uses the renderer's big texture/sampler
   tables (set 0/1) as one image descriptor set and one sampler set. The
   renderer writes global texture indices for deko3d (the 2D, 3D and cube
@@ -82,6 +84,11 @@ backend for it. plume's deko3d backend is MIT; uam is zlib/MIT/MPL-2.0.
   swapchain on the default NWindow; the deko3d backend owns it and presents
   the frame image 1:1 (RGBA8, 720p handheld / the display resolution docked).
   The app's Vulkan/ImGui overlays are not drawn on this path yet.
+- **Performance**: 35.2 fps in-ring on the overclocked test console (draw
+  6 ms, submit 0.05 ms; the NVK baseline was ~20 fps). FSR 1 is available
+  with `native_upscale="fsr1"`; presets 4 (40% of the window height) and 5
+  (33%) go below the old 50% floor, with EASU/RCAS upscaling to the window,
+  for more headroom during attacks and on a stock console.
 - **Still open**: hardware test (no Switch in this environment), a persistent
   DKSH cache, and performance measurement against the NVK baseline.
 

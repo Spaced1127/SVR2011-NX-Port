@@ -260,6 +260,11 @@ def convert(src: str, stage: str) -> str:
         text = re.sub(rf"^#extension {re.escape(ext)}.*\n", "", text, flags=re.M)
     text = re.sub(r"\bnonuniformEXT\(([^()]*)\)", r"(\1)", text)
 
+    # Mesa's GLSL (uam) spells the Vulkan built-ins gl_VertexIndex /
+    # gl_InstanceIndex as gl_VertexID / gl_InstanceID.
+    text = re.sub(r"\bgl_VertexIndex\b", "gl_VertexID", text)
+    text = re.sub(r"\bgl_InstanceIndex\b", "gl_InstanceID", text)
+
     # Vertex inputs: renumber to 0..N and remember the original locations for
     # the pipeline's input layout.
     vin: list[int] = []

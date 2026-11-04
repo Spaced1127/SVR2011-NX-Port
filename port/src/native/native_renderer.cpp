@@ -154,7 +154,7 @@ REXCVAR_DEFINE_BOOL(native_jitter, false, "GPU",
 
 REXCVAR_DEFINE_INT32(native_upscale_quality, 1, "GPU",
                      "FSR 1's render size: 0 Ultra Quality (77% of the window's height), 1 Quality (67%), "
-                     "2 Balanced (59%), 3 Performance (50%)");
+                     "2 Balanced (59%), 3 Performance (50%), 4 Ultra Performance (40%), 5 Extreme (33%)");
 
 REXCVAR_DEFINE_DOUBLE(native_upscale_sharpness, 0.8, "GPU", "FSR 1's sharpening, 0 (none) - 1 (the most)");
 
@@ -1867,8 +1867,8 @@ void ApplyOutputSettings(Renderer* r) {
   // supersampling; Present scales it up (EASU) and sharpens it (RCAS).
   g_fsr = false;
   if (fsr) {
-    constexpr float kShare[4] = {1.0f / 1.3f, 1.0f / 1.5f, 1.0f / 1.7f, 1.0f / 2.0f};
-    const uint32_t h = std::clamp<uint32_t>(uint32_t(std::lround(float(out_h) * kShare[std::clamp(fsr_quality, 0, 3)])),
+    constexpr float kShare[6] = {1.0f / 1.3f, 1.0f / 1.5f, 1.0f / 1.7f, 1.0f / 2.0f, 1.0f / 2.5f, 1.0f / 3.0f};
+    const uint32_t h = std::clamp<uint32_t>(uint32_t(std::lround(float(out_h) * kShare[std::clamp(fsr_quality, 0, 5)])),
                                             kHeight / 4, kHeight * kMaxRenderScale);
     scale = std::min<uint32_t>((h + kHeight - 1) / kHeight, kMaxRenderScale);
     res = std::clamp(float(h) / float(kHeight * scale), 0.25f, 1.0f);
@@ -4973,11 +4973,17 @@ void OnPresent(uint32_t front_buffer) {
     Barrier(r, back, RenderTextureLayout::COPY_DEST);
     const RenderTextureLayout before = *src_layout;
     Transition(r, src, *src_layout, RenderTextureLayout::COPY_SOURCE);
-    // (a fallback: unscaled, cut to the frame image)
-    const plume::RenderBox box(0, 0, int32_t(std::min(src_host_w ? src_host_w : std::min(w, kWidth) * g_scale, g_out_w)),
-                               int32_t(std::min(src_host_h ? src_host_h : std::min(h, kHeight) * g_scale, g_out_h)));
-    list->copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(back),
-                            plume::RenderTextureCopyLocation::Subresource(src), 0, 0, 0, &box);
+    // A fallback: the front buffer at the scene's size (render scale) scaled
+    // to the frame image; a plain copy would leave it in the top-left.
+    const uint32_t src_w = src_host_w ? src_host_w : std::min(w, kWidth) * g_scale;
+    const uint32_t src_h = src_host_h ? src_host_h : std::min(h, kHeight) * g_scale;
+    if (src_w != g_out_w || src_h != g_out_h) {
+      list->blitTexture(back, src);
+    } else {
+      const plume::RenderBox box(0, 0, int32_t(std::min(src_w, g_out_w)), int32_t(std::min(src_h, g_out_h)));
+      list->copyTextureRegion(plume::RenderTextureCopyLocation::Subresource(back),
+                              plume::RenderTextureCopyLocation::Subresource(src), 0, 0, 0, &box);
+    }
     if (before != RenderTextureLayout::UNKNOWN) Transition(r, src, *src_layout, before);
     Barrier(r, back, RenderTextureLayout::SHADER_READ);
   } else if (!shown) {

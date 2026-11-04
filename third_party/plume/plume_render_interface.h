@@ -152,6 +152,11 @@ namespace plume {
         virtual void copyTextureRegion(const RenderTextureCopyLocation &dstLocation, const RenderTextureCopyLocation &srcLocation, uint32_t dstX = 0, uint32_t dstY = 0, uint32_t dstZ = 0, const RenderBox *srcBox = nullptr) = 0;
         virtual void copyBuffer(const RenderBuffer *dstBuffer, const RenderBuffer *srcBuffer) = 0;
         virtual void copyTexture(const RenderTexture *dstTexture, const RenderTexture *srcTexture) = 0;
+        // [svr2011] The whole source scaled to the whole destination. The
+        // default is a plain copy (same size); deko3d uses the 2D engine.
+        virtual void blitTexture(const RenderTexture *dstTexture, const RenderTexture *srcTexture) {
+            copyTexture(dstTexture, srcTexture);
+        }
         virtual void resolveTexture(const RenderTexture *dstTexture, const RenderTexture *srcTexture) = 0;
         virtual void resolveTextureRegion(const RenderTexture *dstTexture, uint32_t dstX, uint32_t dstY, const RenderTexture *srcTexture, const RenderRect *srcRect = nullptr, RenderResolveMode resolveMode = RenderResolveMode::AVERAGE) = 0;
         virtual void buildBottomLevelAS(const RenderAccelerationStructure *dstAccelerationStructure, RenderBufferReference scratchBuffer, const RenderBottomLevelASBuildInfo &buildInfo) = 0;
