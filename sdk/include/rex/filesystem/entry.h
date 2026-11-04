@@ -88,6 +88,11 @@ class Entry {
   const std::string& name() const { return name_; }
   uint32_t attributes() const { return attributes_; }
   size_t size() const { return size_; }
+  // What the guest sees after a write. A save is written in many pieces and
+  // the host file only grows when the port flushes it, so the size has to be
+  // tracked here (GetFileSize, SetFilePointer(FILE_END) and the save code's
+  // "is it all written?" checks read this, not the host's stat).
+  void set_size(size_t size) { size_ = size; }
   size_t allocation_size() const { return allocation_size_; }
   uint64_t create_timestamp() const { return create_timestamp_; }
   uint64_t access_timestamp() const { return access_timestamp_; }

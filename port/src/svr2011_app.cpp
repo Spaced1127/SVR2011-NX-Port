@@ -28,6 +28,7 @@
 #include <rex/filesystem/devices/host_path_device.h>
 #include <rex/filesystem/vfs.h>
 #include <rex/logging.h>
+#include <rex/ui/switch_apm.h>
 
 #include <rex/input/device_assignment.h>
 #include <rex/input/input_system.h>
@@ -124,6 +125,9 @@ REXCVAR_DEFINE_STRING(audio_backend, "xaudio2", "Audio",
                       "Audio output: xaudio2 (default) or sdl")
     .allowed({"xaudio2", "sdl"})
     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
+REXCVAR_DEFINE_INT32(switch_gpu_mhz, 460, "GPU",
+                     "Handheld GPU MHz requested from APM (0 = leave the console's clocks alone, so a "
+                     "sys-clk overclock is kept)");
 
 namespace {
 
@@ -680,6 +684,15 @@ void Svr2011App::OnPostLoadXexImage() {
                     "1903) can't open everywhere - if the game starts to a black screen, move it to a folder "
                     "with a plain name (such as C:\\Games\\SvR2011)");
     }
+#endif
+#if defined(__SWITCH__)
+    // Handheld mode runs the GPU at 307.2 MHz. The game needs the official
+    // 460.8 MHz handheld profile (the same apm request commercial games use,
+    // no overclock): it makes the NVK renderer initialization and the first
+    // menu load noticeably faster. RexSwitchApmVigilar (switch_perf.cpp)
+    // keeps the memory clock at 1331.2 MHz afterwards.
+    RexSwitchApmPedirGpuMhz(REXCVAR_GET(switch_gpu_mhz));
+    RexSwitchApmAplicar();
 #endif
     static const char* const kGroups[][2] = {
         {"display", "fullscreen fullscreen_exclusive window_width window_height vsync show_fps perf_overlay perf_overlay_corner perf_log_seconds"},

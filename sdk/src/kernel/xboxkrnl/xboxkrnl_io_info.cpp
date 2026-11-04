@@ -160,10 +160,12 @@ u32 NtQueryInformationFile_entry(u32 file_handle, ppc_ptr_t<X_IO_STATUS_BLOCK> i
       break;
     };
     case XFileNetworkOpenInformation: {
-      // Make sure we're working with up-to-date information, just in case the
-      // file size has changed via something other than NtSetInfoFile
-      // (eg. seems NtWriteFile might extend the file in some cases)
-      file->entry()->update();
+      // Do not stat the host file here. A save is written in many pieces and
+      // kept in HostPathFile's write-back buffer, so the host file is still
+      // short; entry()->size() is the size the guest has written so far. The
+      // old update() made the save code see 0 and rewrite the file forever.
+      // (entry()->update() is still used after a real flush, in
+      // HostPathFile::Flush.)
 
       auto info = info_ptr.as<X_FILE_NETWORK_OPEN_INFORMATION*>();
       info->creation_time = file->entry()->create_timestamp();

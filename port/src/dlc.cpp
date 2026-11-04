@@ -21,6 +21,9 @@
 REXCVAR_DEFINE_BOOL(unlock_everything, true, "Gameplay",
                     "Every locked superstar, arena and item unlocked from the start (Fan Axxess); "
                     "off: unlocked by playing, the DLC stays");
+REXCVAR_DEFINE_BOOL(dlc_fan_axxess, true, "Gameplay",
+                    "Install the port's Fan Axxess key package (test aid: off removes it, so the "
+                    "game does not open the fake DLC during the match load)");
 
 namespace svr2011 {
 
@@ -178,6 +181,13 @@ void GrantFanAxxess(const std::filesystem::path& title_root, uint32_t title_id) 
   const auto installed = title_root / "00000002";
   const auto ours = installed / kFanPackage;
   const auto header = title_root / "Headers" / "00000002" / (std::string(kFanPackage) + ".header");
+  if (!REXCVAR_GET(dlc_fan_axxess)) {
+    // Test aid: no fake DLC package. Remove the one an earlier run installed,
+    // so the game does not open the content during the match load.
+    std::filesystem::remove_all(ours, ec);
+    std::filesystem::remove(header, ec);
+    return;
+  }
   for (const auto& pkg : std::filesystem::directory_iterator(installed, ec)) {
     if (pkg.path().filename() == kFanPackage) continue;
     if (HasItemType(pkg.path() / "info" / "catalog.dlc", 8)) return;  // (the player's own)

@@ -14,10 +14,13 @@ The port is based on the public
 by KaikoClanworth1 and contributors, and on the Horizon (Switch) layer of the
 public NFSMW-NX and SA2-NX ReXGlue ports.
 
-> **Status: first buildable NRO, not yet playable.** The source now builds a
-> 66 MB `svr2011.nro` for Switch with devkitA64 + NVK. It has not been run on
-> hardware yet; the next milestone is the first boot test. See
-> [docs/PORTING_PLAN.md](docs/PORTING_PLAN.md) and
+> **Status: work in progress, playable on hardware at about 20 fps.** The
+> source builds a 77 MB `svr2011.nro` with devkitA64 + NVK. Boot, menus,
+> save loading, a 1v1 match, controls and attacks work. The current limits are
+> NVK's per-draw cost (about 660 draws and 20 fps in the ring) and save
+> creation on the console, which is still unreliable; a folder save made by
+> the PC build loads correctly. A deko3d branch is the next performance step.
+> See [docs/PORTING_PLAN.md](docs/PORTING_PLAN.md) and
 > [docs/TESTING.md](docs/TESTING.md).
 
 ---
@@ -56,11 +59,13 @@ PC produces the NRO from their own game folder. See
 | Build scaffolding and third-party fetch | Done |
 | Host code generator (`rexglue`) from the user's `default.xex` | Done (403 generated files) |
 | Switch portlibs + NVK + Vulkan build | Done (compiles) |
-| Switch NRO target | **Builds** (66 MB `svr2011.nro`); hardware test pending |
-| Mesa/NVK + Vulkan presentation | Wired and compiled; hardware test pending |
-| Boot to the main menu | Not yet |
-| Match, audio, input, saves | Not yet |
-| Performance pass (30 fps target) | Not yet |
+| Switch NRO target | **Builds** (77 MB `svr2011.nro`) |
+| Mesa/NVK + Vulkan presentation | Works on hardware |
+| Boot to the main menu | Works |
+| Match, audio, input | Works: 1v1 match loads and plays; attacks and movement work |
+| Saves | A PC-made folder save loads (4.2 MB); creating a save on the console is still slow/unreliable |
+| Performance pass (30 fps target) | ~20 fps in-ring on an overclocked console (CPU 1785 / GPU 921.6 MHz) at 0.5 render scale; NVK is draw-bound. deko3d branch next |
+| DLC | The port's fake Fan Axxess package hangs the DLC loader; `dlc_fan_axxess = false` |
 | Folder-based Windows builder | Done, tested end-to-end (`Build SVR2011-NX.cmd`) |
 | Source-only release packaging | Done (`tools/package_release.ps1`) |
 
@@ -155,10 +160,15 @@ Do not redistribute this folder. It contains game data.
 
 ## Controls
 
-The Switch port uses the game's Xbox 360 control layout. The default mapping
-is by letter (Switch A = Xbox A, B = B, X = X, Y = Y); a position-based
-mapping is planned as a setting. The in-game menus, entrances and matches use
-the original game prompts.
+The Switch port uses the game's Xbox 360 control layout. Set
+`input_xbox_layout` in `svr2011.toml`:
+
+- `true` (recommended): buttons by position, as on an Xbox pad — the Switch
+  bottom button (B) is Xbox A, the right button (A) is Xbox B, the left (Y)
+  is Xbox X, the top (X) is Xbox Y.
+- `false`: by letter — Switch A is Xbox A, B is B, X is X, Y is Y.
+
+The in-game menus, entrances and matches use the original game prompts.
 
 ---
 

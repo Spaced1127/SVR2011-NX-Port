@@ -129,6 +129,20 @@ bool ReportDevice(const rex::external_frame::VulkanDevice& d) {
   };
   std::string line;
   bool bc = true, d24s8 = false, d32s8 = false, unorm16_filter = true;
+#if defined(__SWITCH__)
+  // NVK's vkGetPhysicalDeviceFormatProperties is pathologically slow on Tegra:
+  // the 22 queries below took 4.5 minutes in one run. The NVK gm20b format
+  // support is fixed and was measured; use it directly instead of querying.
+  line =
+      "BC1 sf, BC1 sRGB sf, BC2 sf, BC2 sRGB sf, BC3 sf, BC3 sRGB sf, BC4 sf, BC5 sf, "
+      "RGBA8 sfcb, RGBA8 sRGB sfcb, RGB10A2 sfcb, RGBA16F sfcb, RGBA16 sfcb, "
+      "RGBA16 snorm sfcb, RG16 snorm sfcb, RG16 sfcb, R16 sfcb, R32F sfcb, RGBA32F sfcb, "
+      "D24S8 sfd, D32S8 sfd, D32F sfd";
+  bc = true;
+  d24s8 = true;
+  d32s8 = true;
+  unorm16_filter = true;
+#else
   for (const Format& f : kFormats) {
     VkFormatProperties fp;
     get_format(physical, f.format, &fp);
@@ -150,6 +164,7 @@ bool ReportDevice(const rex::external_frame::VulkanDevice& d) {
         !(o & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
       unorm16_filter = false;
   }
+#endif
   REXLOG_INFO("GPU report: formats (s sampled, f filtered, c color target, b blended, d depth target): {}", line);
 
   bc = bc && features.textureCompressionBC && !simulated;
@@ -217,12 +232,25 @@ class VulkanBackend final : public Backend {
   plume::RenderShaderFormat ShaderFormat() const override { return plume::RenderShaderFormat::SPIRV; }
 
   void LoadPipelineCache(plume::RenderDevice* device, const std::filesystem::path& file) override {
+    // Read the cache in one bulk read. The old istreambuf_iterator loop read
+    // byte by byte; a multi-MB cache on the SD card took minutes and looked
+    // like a hang before the renderer logged anything.
     std::vector<uint8_t> data;
-    if (std::ifstream in{file, std::ios::binary}) {
-      data.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(file, ec);
+    if (!ec && size > 0 && size <= (64u << 20)) {
+      data.resize(size_t(size));
+      std::ifstream in{file, std::ios::binary};
+      if (in) {
+        in.read(reinterpret_cast<char*>(data.data()), std::streamsize(size));
+        if (!in) data.clear();
+      } else {
+        data.clear();
+      }
     }
     auto* vk = static_cast<plume::VulkanDevice*>(device);
     saved_size_ = data.size();
+    REXLOG_INFO("native renderer: pipeline cache loading ({} KB)", data.size() / 1024);
     if (vk->setPipelineCacheData(data.empty() ? nullptr : data.data(), data.size())) {
       REXLOG_INFO("native renderer: pipeline cache {} ({} KB)", data.empty() ? "new" : "loaded",
                   data.size() / 1024);

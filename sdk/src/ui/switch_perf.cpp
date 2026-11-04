@@ -837,6 +837,13 @@ void ProfilerMain(void*) {
       const size_t idx = rr;
       rr = (rr + 1) % kMaxThreads;
       Slot& s = g_slots[idx];
+      // [svr2011] Only pause the game's own threads. Pausing a Vulkan/Mesa
+      // thread that is inside a long ioctl can leave the profiler stuck (the
+      // 10 s report was cut off at "setup upload"), and those threads are not
+      // what is slow here: the XThreads are.
+      if (!std::strstr(s.name, "XThread")) {
+        continue;
+      }
       const u32 h = s.handle.load();
       if (!h || !s.busy) {
         continue;

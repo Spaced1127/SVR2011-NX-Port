@@ -130,7 +130,16 @@ class HostPathFile : public File {
   // Direct read split into chunks. See the comment on nfsmw_io_trozo_mb in the .cpp.
   X_STATUS LeerDirecta(std::span<uint8_t> buffer, size_t byte_offset, size_t* out_bytes_read);
 
+  // Write-back buffer: the game writes saves in many small pieces, and one
+  // pwrite per piece to the SD card took ~59 s. Contiguous writes are kept in
+  // RAM and flushed once on Flush()/close.
+  X_STATUS VolcarEscritura();
+
   std::unique_ptr<rex::filesystem::FileHandle> file_handle_;
+
+  std::vector<uint8_t> escritura_;
+  size_t escritura_inicio_ = 0;
+  bool escritura_sucia_ = false;
 
   std::vector<uint8_t> ventana_;
   size_t ventana_inicio_ = 0;

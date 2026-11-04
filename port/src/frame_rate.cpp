@@ -32,6 +32,12 @@
 #include "fast_start.h"
 #include "pad_icons.h"
 
+#include <rex/cvar.h>
+
+REXCVAR_DEFINE_BOOL(svr2011_watchdog_dump, true, "Debug",
+                    "Dump every guest thread when a pass is stuck (test aid: off keeps the "
+                    "watchdog from spending minutes writing the dump to a busy SD card)");
+
 #if defined(_WIN32)
 #include <windows.h>
 #endif
@@ -49,6 +55,10 @@
 #include <thread>
 #include <utility>
 #include <vector>
+
+#if defined(__SWITCH__)
+#include <switch.h>
+#endif
 
 #include <rex/cvar.h>
 #include <rex/hook.h>
@@ -246,7 +256,7 @@ std::atomic<rex::system::KernelState*> g_kernel{nullptr};
 // reads inside the thread's own stack (its PCR: +0x70 base, high; +0x74 end,
 // low), and stops at the first link that leaves it or doesn't go up.
 
-void DumpGuestThreads(uint8_t* base) {
+void DumpGuestThreads(uint8_t* base, bool only_interesting = false) {
   auto* kernel = g_kernel.load();
   if (!kernel || !g_memory) return;
   // (a stack's range can hold pages never mapped - its untouched end: each
@@ -260,14 +270,27 @@ void DumpGuestThreads(uint8_t* base) {
     const PPCContext* c = t->thread_state()->context();
     const uint32_t hi = Rd32(base + t->pcr_ptr() + 0x70), lo = Rd32(base + t->pcr_ptr() + 0x74);
     const auto in_stack = [&](uint32_t a) { return lo < hi && a >= lo && a + 4 <= hi && readable(a); };
-    std::string chain = fmt::format("{:08X}", uint32_t(c->lr));
+    std::vector<uint32_t> frames;
+    frames.push_back(uint32_t(c->lr));
     uint32_t sp = c->r1.u32;
     for (int i = 0; i < 16 && in_stack(sp); ++i) {
       const uint32_t prev = Rd32(base + sp);
       if (prev <= sp || !in_stack(prev) || !in_stack(prev - 8)) break;
-      chain += fmt::format(" {:08X}", Rd32(base + prev - 8));
+      frames.push_back(Rd32(base + prev - 8));
       sp = prev;
     }
+    // For a long pass that is still making progress (the save serialization):
+    // only the threads in the save/content/update region, not all 23 idle
+    // ones. A broad range on purpose: the stack is what names the culprit.
+    if (only_interesting) {
+      const auto interesting = [](uint32_t a) {
+        return (a >= 0x826A0000u && a < 0x826B0000u) || (a >= 0x82900000u && a < 0x82930000u) ||
+               (a >= 0x82B00000u && a < 0x82D60000u);
+      };
+      if (std::none_of(frames.begin(), frames.end(), interesting)) continue;
+    }
+    std::string chain;
+    for (uint32_t a : frames) chain += fmt::format("{}{:08X}", chain.empty() ? "" : " ", a);
     REXLOG_WARN("frame rate: thread {:08X} '{}' at {}", t->thread_id(), t->name(), chain);
   }
   // The game's heap locks held (a critical section per heap, 28 bytes each from 0x82EC55B0: +0x10 lock count,
@@ -288,6 +311,10 @@ void DumpGuestThreads(uint8_t* base) {
   REXLOG_WARN("frame rate: heap locks held:{}", held.empty() ? std::string(" none") : held);
 }
 std::atomic<int64_t> g_dbg_since{0};
+// When the current update/draw pass started. g_dbg_since is reset by every
+// virtual call, so a pass that keeps working (the save serialization) never
+// looks "stuck"; this one measures the whole pass.
+std::atomic<int64_t> g_pass_start{0};
 
 // obj->vtable[slot](obj, r4, r5)
 void Virt(PPCContext& ctx, uint8_t* base, uint32_t obj, int slot, uint32_t r4 = 0, uint32_t r5 = 0) {
@@ -582,6 +609,7 @@ REX_HOOK_RAW(sub_8269C728) {
   for (int i = 0; i < passes; ++i) {
     g_dbg_pass_now = 10 + i;
     g_dbg_pass = 10 + i;
+    g_pass_start = Clock::now().time_since_epoch().count();
     g_extra_update = i + 1 < passes;
     UpdatePass(ctx, base, m);
   }
@@ -617,14 +645,17 @@ REX_HOOK_RAW(sub_8269C728) {
   if (test_stuck && !stuck_done && Clock::now() - started > std::chrono::seconds(60)) {
     stuck_done = true;
     g_dbg_pass = 20;
+    g_pass_start = Clock::now().time_since_epoch().count();
     g_dbg_since = Clock::now().time_since_epoch().count();
     std::this_thread::sleep_for(std::chrono::seconds(5));
   }
   g_dbg_pass = 20;
   g_dbg_pass_now = 20;
+  g_pass_start = Clock::now().time_since_epoch().count();
   DrawPass(ctx, base, m);
   ++g_lat_drawn;
   g_dbg_pass = 0;
+  g_pass_start = 0;
   g_dbg_since = Clock::now().time_since_epoch().count();
   static std::once_flag watchdog;
   // Test aid: SVR2011_TEST_HITCH_MS=<ms> - an update or draw pass running
@@ -652,6 +683,12 @@ REX_HOOK_RAW(sub_8269C728) {
   });
   std::call_once(watchdog, [] {
     std::thread([] {
+#if defined(__SWITCH__)
+      // The guest threads run at 0x3B and can saturate all four cores during a
+      // model load, which is why the Home button stops responding. Run the
+      // watchdog above them so it can still exit cleanly.
+      svcSetThreadPriority(CUR_THREAD_HANDLE, 0x20);
+#endif
       // (test aid: SVR2011_TEST_DUMP_AT=<s> - every guest thread's back chain once, <s> s after the start)
       static const int dump_at = [] { const char* v = std::getenv("SVR2011_TEST_DUMP_AT"); return v ? std::atoi(v) : 0; }();
       const auto started = Clock::now();
@@ -664,8 +701,27 @@ REX_HOOK_RAW(sub_8269C728) {
           REXLOG_INFO("frame rate: test - thread dump");
           DumpGuestThreads(g_base);
         }
-        const auto since = Clock::time_point(Clock::duration(g_dbg_since.load()));
-        if (g_dbg_pass != 0 && Clock::now() - since > std::chrono::seconds(3)) {
+        const int64_t ps = g_pass_start.load();
+        if (g_dbg_pass != 0 && ps != 0 &&
+            Clock::now() - Clock::time_point(Clock::duration(ps)) > std::chrono::seconds(10)) {
+          static int64_t dumped_pass = -1;
+          if (dumped_pass != ps) {
+            dumped_pass = ps;
+            REXLOG_WARN("frame rate: pass {} over 10 s - save/content threads",
+                        g_dbg_pass.load());
+            if (REXCVAR_GET(svr2011_watchdog_dump)) {
+              std::thread([] {
+                if (uint8_t* b = g_base) {
+                  DumpGuestThreads(b, true);
+                  DumpJobEvents();
+                }
+              }).detach();
+            }
+          }
+        }
+        const int64_t s = g_dbg_since.load();
+        const auto since = Clock::time_point(Clock::duration(s));
+        if (g_dbg_pass != 0 && s != 0 && Clock::now() - since > std::chrono::seconds(3)) {
           std::string jobs;
           if (uint8_t* b = g_base) {
             const uint32_t q = Rd32(b + 0x82ED6030);
@@ -683,12 +739,49 @@ REX_HOOK_RAW(sub_8269C728) {
                       std::chrono::duration_cast<std::chrono::seconds>(Clock::now() - since).count(),
                       g_dbg_pass.load(), g_dbg_obj.load(), g_dbg_fn.load(), jobs);
           static int64_t dumped_for = -1;  // (once per stuck update)
-          if (dumped_for != g_dbg_since.load() && g_base) {
-            dumped_for = g_dbg_since.load();
-            DumpGuestThreads(g_base);
-            DumpJobEvents();
-            if (g_in_match.load()) svr2011::LogMatchState(g_base, "world update stuck"), svr2011::MatchBoxLog("world update stuck");
+          if (REXCVAR_GET(svr2011_watchdog_dump) && dumped_for != s && g_base) {
+            dumped_for = s;
+            // Never do this on the watchdog thread: it writes one line per
+            // guest thread and a busy SD card can take minutes, which used to
+            // delay the 60 s exit until the console was hard-locked.
+            std::thread([] {
+              if (uint8_t* b = g_base) {
+                DumpGuestThreads(b, true);
+                DumpJobEvents();
+                if (g_in_match.load()) {
+                  svr2011::LogMatchState(b, "world update stuck");
+                  svr2011::MatchBoxLog("world update stuck");
+                }
+              }
+            }).detach();
           }
+        }
+      }
+    }).detach();
+    // Independent backstop. The watchdog above can be stuck inside a log write
+    // (or a dump it did not offload) when the SD card is busy; this thread only
+    // looks at the clock, so a stuck pass still returns to the Home menu. It
+    // does not log anything until the deadline, so it cannot be delayed by the
+    // logging of the others.
+    std::thread([] {
+#if defined(__SWITCH__)
+      svcSetThreadPriority(CUR_THREAD_HANDLE, 0x1F);
+#endif
+      for (;;) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        const int64_t s = g_dbg_since.load();
+        if (s == 0) continue;
+        const auto stuck = Clock::now() - Clock::time_point(Clock::duration(s));
+        if (g_dbg_pass != 0 && stuck > std::chrono::seconds(60)) {
+          REXLOG_ERROR("frame rate: world update stuck for 60 s; exiting to the Home menu");
+          std::_Exit(0);
+        }
+        // Global backstop: no world update for five minutes. The per-pass check
+        // above only runs while a pass is open; a load that never reaches the
+        // next pass would otherwise stay at 0 fps forever.
+        if (stuck > std::chrono::seconds(300)) {
+          REXLOG_ERROR("frame rate: no world update for 300 s; exiting to the Home menu");
+          std::_Exit(0);
         }
       }
     }).detach();

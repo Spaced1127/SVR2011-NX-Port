@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstring>
 #include <map>
 #include <memory>
@@ -637,6 +638,7 @@ HostPathFile::~HostPathFile() {
 }
 
 void HostPathFile::Destroy() {
+  Flush();
   delete this;
 }
 
@@ -647,7 +649,39 @@ X_STATUS HostPathFile::Flush() {
   if (!file_handle_) {
     return X_STATUS_SUCCESS;
   }
+  const X_STATUS estado = VolcarEscritura();
+  if (estado != X_STATUS_SUCCESS) {
+    return estado;
+  }
   file_handle_->Flush();
+  // The bytes are on the card now: take the size and timestamps from it.
+  entry_->update();
+  return X_STATUS_SUCCESS;
+}
+
+X_STATUS HostPathFile::VolcarEscritura() {
+  if (!escritura_sucia_) {
+    return X_STATUS_SUCCESS;
+  }
+  const auto inicio = std::chrono::steady_clock::now();
+  size_t escritos = 0;
+  if (!file_handle_ ||
+      !file_handle_->Write(escritura_inicio_, escritura_.data(), escritura_.size(), &escritos) ||
+      escritos != escritura_.size()) {
+    return X_STATUS_END_OF_FILE;
+  }
+  const size_t bytes = escritura_.size();
+  const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - inicio)
+                      .count();
+  if (bytes >= 1024 * 1024 || ms >= 200 ||
+      entry_->name().find("Save") != std::string::npos) {
+    REXFS_INFO("[io] escritura de {} bytes en {} ms ('{}')", bytes, ms,
+               rex::path_to_utf8(entry_->absolute_path()));
+  }
+  escritura_.clear();
+  escritura_.shrink_to_fit();
+  escritura_sucia_ = false;
   return X_STATUS_SUCCESS;
 }
 
@@ -753,6 +787,14 @@ X_STATUS HostPathFile::ReadSync(std::span<uint8_t> buffer, size_t byte_offset,
     return X_STATUS_ACCESS_DENIED;
   }
 
+  // A read after a write must see the buffered bytes.
+  if (escritura_sucia_) {
+    const X_STATUS estado = VolcarEscritura();
+    if (estado != X_STATUS_SUCCESS) {
+      return estado;
+    }
+  }
+
   const size_t pedido = buffer.size();
   if (ventana_activa_ && pedido && pedido <= ventana_tam_ / kPeticionMaxFraccion) {
     // The request falls entirely within what is already in RAM.
@@ -850,11 +892,47 @@ X_STATUS HostPathFile::WriteSync(std::span<const uint8_t> buffer, size_t byte_of
   ventana_activa_ = false;
   ventana_bytes_ = 0;
 
-  if (file_handle_->Write(byte_offset, buffer.data(), buffer.size(), out_bytes_written)) {
-    return X_STATUS_SUCCESS;
-  } else {
-    return X_STATUS_END_OF_FILE;
+  // The game writes saves in many small pieces. Keep contiguous writes in RAM
+  // and write them in one go on Flush()/close; one pwrite per piece to the SD
+  // card took ~59 s.
+  //
+  // The buffer has a ceiling so a save that is written and never closed does
+  // not sit in RAM forever: at 8 MB it is written and a new run starts.
+  constexpr size_t kMaxWriteBuffer = 8 * 1024 * 1024;
+  if (escritura_sucia_ && byte_offset != escritura_inicio_ + escritura_.size()) {
+    const X_STATUS estado = VolcarEscritura();
+    if (estado != X_STATUS_SUCCESS) {
+      return estado;
+    }
   }
+  if (escritura_sucia_ && escritura_.size() + buffer.size() > kMaxWriteBuffer) {
+    const X_STATUS estado = VolcarEscritura();
+    if (estado != X_STATUS_SUCCESS) {
+      return estado;
+    }
+  }
+  if (!escritura_sucia_) {
+    escritura_inicio_ = byte_offset;
+    escritura_.clear();
+    escritura_sucia_ = true;
+  }
+  escritura_.insert(escritura_.end(), buffer.begin(), buffer.end());
+  if (entry_->name().find("Save") != std::string::npos) {
+    static std::atomic<uint32_t> avisos{0};
+    const uint32_t n = avisos.fetch_add(1, std::memory_order_relaxed);
+    if (n < 12 || (n % 1024) == 0) {
+      REXFS_INFO("[io] escritura save: {} bytes en {}, buffer {} ('{}')", buffer.size(), byte_offset,
+                 escritura_.size(), entry_->name());
+    }
+  }
+  // The save code asks for the file size right after writing. Until the run is
+  // flushed the host file is still short, so the guest's view is kept here.
+  const size_t fin = escritura_inicio_ + escritura_.size();
+  if (fin > entry_->size()) {
+    entry_->set_size(fin);
+  }
+  *out_bytes_written = buffer.size();
+  return X_STATUS_SUCCESS;
 }
 
 X_STATUS HostPathFile::SetLength(size_t length) {
@@ -868,7 +946,15 @@ X_STATUS HostPathFile::SetLength(size_t length) {
   ventana_activa_ = false;
   ventana_bytes_ = 0;
 
+  if (escritura_sucia_) {
+    const X_STATUS estado = VolcarEscritura();
+    if (estado != X_STATUS_SUCCESS) {
+      return estado;
+    }
+  }
+
   if (file_handle_->SetLength(length)) {
+    entry_->set_size(length);
     return X_STATUS_SUCCESS;
   } else {
     return X_STATUS_END_OF_FILE;

@@ -21,6 +21,11 @@ namespace svr2011 {
 
 void InstallArenaMods(rex::memory::Memory* memory, rex::filesystem::VirtualFileSystem* fs);
 
+// With arena_crowd=off: queue a stock arena's pack (bgNN.pac) for the
+// crowd-less copy, so the demo and quick matches lose the audience too (the
+// custom arenas already go through the same overlay).
+void PrepareStockArenaCrowd(int arena);
+
 // The arena select page label (an ImGui overlay).
 void InstallArenaModsOverlay(rex::ui::ImGuiDrawer* drawer);
 

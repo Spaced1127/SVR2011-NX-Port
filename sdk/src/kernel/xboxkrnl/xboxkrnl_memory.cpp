@@ -352,9 +352,13 @@ u32 MmAllocatePhysicalMemoryEx_entry(u32 flags, u32 region_size, u32 protect_bit
                        (uint32_t)flags, (uint32_t)region_size, (uint32_t)protect_bits,
                        (uint32_t)min_addr_range, (uint32_t)max_addr_range, (uint32_t)alignment);
   // [svr2011] The game reserves the console's physical memory in very large
-  // blocks; log those so a failed reservation names its size and flags.
+  // blocks; log those so a failed reservation names its size and flags. The
+  // probe walks down in 1 MB steps, so only the first few attempts are logged:
+  // each line is an SD card write, and hundreds of them slow the probe down.
   const bool large_allocation = region_size >= (64u << 20);
-  if (large_allocation) {
+  static std::atomic<uint32_t> large_attempts{0};
+  const uint32_t attempt = large_attempts.fetch_add(1, std::memory_order_relaxed);
+  if (large_allocation && attempt < 8) {
     REXKRNL_WARN(
         "MmAllocatePhysicalMemoryEx: size={:#x} flags={:#x} protect={:#x} "
         "min={:#x} max={:#x} align={:#x}",

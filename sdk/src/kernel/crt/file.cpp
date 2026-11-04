@@ -8,6 +8,7 @@
  * @license     BSD 3-Clause License
  */
 
+#include <atomic>
 #include <cstring>
 #include <memory>
 #include <span>
@@ -221,8 +222,20 @@ u32 SetEndOfFile_entry(u32 hFile) {
 }
 
 u32 FlushFileBuffers_entry(u32 hFile) {
-  (void)hFile;
-  return 1;
+  auto file = REX_KERNEL_OBJECTS()->LookupObject<rex::system::XFile>(static_cast<uint32_t>(hFile));
+  if (!file) {
+    return 0;
+  }
+  // The CRT wrapper used to return 1 without doing anything. The save code
+  // calls this after writing, so it must reach HostPathFile::Flush() and put
+  // the buffered bytes on the SD card.
+  X_STATUS status = file->Flush();
+  static std::atomic<uint32_t> avisos{0};
+  if (avisos.fetch_add(1, std::memory_order_relaxed) < 16) {
+    REXKRNL_INFO("[guardado] FlushFileBuffers: {} bajado al disco (resultado {:08X})", file->path(),
+                 uint32_t(status));
+  }
+  return XSUCCEEDED(status) ? 1u : 0u;
 }
 
 u32 DeleteFileA_entry(mapped_string lpFileName) {

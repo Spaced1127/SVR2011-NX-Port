@@ -213,7 +213,16 @@ bool BigModelMemory() {
 uint32_t ModelPageLimit() {
   static const uint32_t pages = [] {
     if (const char* v = std::getenv("SVR2011_TEST_PAGE_LIMIT"); v && *v) return uint32_t(std::strtoul(v, nullptr, 10));
-    if (!BigModelMemory()) return 192u;
+    if (!BigModelMemory()) {
+#if defined(__SWITCH__)
+      // The match load (12 weapon models) spent ~27 s in the model loader with
+      // the game's 192-page cap; the loader kept falling back. 512 pages is
+      // still small next to the 512 MB guest heap and lets it use its own heap.
+      return 512u;
+#else
+      return 192u;
+#endif
+    }
     uint64_t ram = 0;  // (0: the rule doesn't apply - a PC)
 #if defined(__ANDROID__)
     ram = uint64_t(sysconf(_SC_PHYS_PAGES)) * uint64_t(sysconf(_SC_PAGE_SIZE));

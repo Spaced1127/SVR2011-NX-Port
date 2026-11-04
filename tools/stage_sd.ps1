@@ -82,7 +82,7 @@ if ($missing.Count -gt 0) {
 # valid on the console and would leave the pad dead.
 $toml = @'
 # WWE SmackDown vs. Raw 2011 - Nintendo Switch settings.
-# Written by tools/stage_sd.ps1 for the first hardware test.
+# Written by tools/stage_sd.ps1. Tune the GPU block for your console.
 gpu_plugin = "xenos"
 native_renderer = "main"
 gpu_backend = "vulkan"
@@ -91,14 +91,39 @@ resolution = "720p"
 resolution_scale = 1
 fullscreen = true
 vsync = true
+# Performance defaults for the NVK renderer: half-resolution scene with the
+# effects scaled with it, the crowd and shadows off, command recording on its
+# own thread.
 native_max_scale = 1
 native_2x_msaa = false
-native_prepare_pipelines = false
+native_prepare_pipelines = true
 native_texture_quality = "low"
-native_scale_effects = false
+native_scale_effects = true
+native_render_scale = 0.5
+native_upscale = "off"
+native_record_thread = true
+native_shadows = false
+arena_crowd = "off"
 depth_of_field = false
 motion_blur = false
+# 460 = the official handheld GPU profile. Set 0 to leave the clocks alone
+# when the console is overclocked with sys-clk.
+switch_gpu_mhz = 460
+# true: face buttons by position (Switch bottom = Xbox A), as on an Xbox pad.
+# false: by letter (Switch A = Xbox A).
+input_xbox_layout = true
+# The port's fake Fan Axxess package is incomplete and hangs the DLC loader;
+# leave it off. unlock_everything is off for the same reason.
 unlock_everything = false
+dlc_fan_axxess = false
+svr2011_watchdog_dump = false
+# Save reads: a folder save (Saves/SaveData.dat/SaveData.Dat) loads without a
+# copy; the flat-file form is still slow on the console.
+nfsmw_io_ventana_kb = 1024
+nfsmw_io_ventanas_max = 32
+nfsmw_io_cache_mb = 64
+nfsmw_io_rangos_mb = 32
+native_resolve_write_back = true
 '@
 
 $copies = @(

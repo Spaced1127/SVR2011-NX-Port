@@ -1341,6 +1341,11 @@ REX_HOOK_RAW(sub_8217D070) {
 
 REX_EXTERN(__imp__sub_8217DCE8);
 REX_HOOK_RAW(sub_8217DCE8) {
+  // The crowd is off: its models are empty, and its per-frame renderer (the
+  // flip-flop buffers, a dozen render passes on the Switch) has nothing to
+  // draw. Skipping it here is what actually removes those passes; emptying
+  // the packs alone left the renderer running every frame.
+  if (svr2011::crowd::Off()) return;
   CrowdIndexGuard(base, "the crowd renderer");
   __imp__sub_8217DCE8(ctx, base);
 }
@@ -2067,6 +2072,20 @@ void GrowArenaHeap(rex::memory::Memory* memory) {
   REXLOG_INFO("[svr2011] arena mods: arena heap {} MB (+{} MB)", kb / 1024, g_arena_heap_extra_kb / 1024);
 }
 
+void PrepareStockArenaCrowd(int arena) {
+  if (!crowd::Off()) return;
+  char name[16];
+  std::snprintf(name, sizeof(name), "bg%02d.pac", arena);
+  const fs::path requested = g_game / "pac" / "bg" / name;
+  std::error_code ec;
+  if (!fs::exists(requested, ec)) return;
+  std::lock_guard lock(g_mutex);
+  PrepareOverlay();
+  if (Place(requested, name)) {
+    REXLOG_INFO("[svr2011] crowd: off - {} queued without its crowd", name);
+  }
+}
+
 void InstallArenaMods(rex::memory::Memory* memory, rex::filesystem::VirtualFileSystem* fs) {
   g_memory = memory;
   GrowArenaHeap(memory);
@@ -2079,6 +2098,12 @@ void InstallArenaMods(rex::memory::Memory* memory, rex::filesystem::VirtualFileS
     std::lock_guard lock(g_mutex);
     PrepareOverlay();
     REXLOG_INFO("[svr2011] crowd: off - arenas without their crowd");
+  }
+  if (crowd::Off()) {
+    // The stock arenas the demo and quick matches use: their crowd-less
+    // copies are made in the background before the match loads.
+    PrepareStockArenaCrowd(1);
+    PrepareStockArenaCrowd(2);
   }
   LoadCustomArenas();
   // Test aid: SVR2011_TEST_ARENA_MOD=<custom arena folder> - it is picked from the start, on its base arena's tile

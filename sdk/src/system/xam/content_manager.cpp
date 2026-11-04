@@ -279,7 +279,8 @@ std::filesystem::path ContentManager::ResolvePackagePath(uint64_t xuid,
   // save is kept as a folder.
   if (IsFlat(data.content_type)) {
     auto flat = FlatPath(data.file_name());
-    return std::filesystem::is_directory(flat) ? flat : FlatMountPath(data.file_name());
+    std::error_code ec;
+    return std::filesystem::is_directory(flat, ec) ? flat : FlatMountPath(data.file_name());
   }
 
   // Content path:
@@ -340,17 +341,24 @@ std::vector<XCONTENT_AGGREGATE_DATA> ContentManager::ListContent(uint32_t device
     }
 
     XCONTENT_AGGREGATE_DATA content_data;
-    if (XSUCCEEDED(ReadContentHeaderFile(rex::path_to_utf8(file_info.name), xuid, title_id,
-                                         content_type, content_data))) {
-      result.emplace_back(std::move(content_data));
-    } else {
-      content_data.device_id = device_id;
-      content_data.content_type = content_type;
-      content_data.set_display_name(rex::path_to_utf16(file_info.name));
-      content_data.set_file_name(rex::path_to_utf8(file_info.name));
-      content_data.title_id = title_id;
-      content_data.xuid = xuid;
-      result.emplace_back(std::move(content_data));
+    try {
+      if (XSUCCEEDED(ReadContentHeaderFile(rex::path_to_utf8(file_info.name), xuid, title_id,
+                                           content_type, content_data))) {
+        result.emplace_back(std::move(content_data));
+      } else {
+        content_data.device_id = device_id;
+        content_data.content_type = content_type;
+        content_data.set_display_name(rex::path_to_utf16(file_info.name));
+        content_data.set_file_name(rex::path_to_utf8(file_info.name));
+        content_data.title_id = title_id;
+        content_data.xuid = xuid;
+        result.emplace_back(std::move(content_data));
+      }
+    } catch (const std::filesystem::filesystem_error& e) {
+      // A save created with an invalid (non-UTF-8) guest file name: skip it
+      // instead of letting the exception escape on the dispatch thread.
+      REXSYS_WARN("[guardado] entrada ignorada (nombre no valido): {}", e.what());
+      continue;
     }
   }
 
@@ -369,13 +377,14 @@ std::vector<XCONTENT_AGGREGATE_DATA> ContentManager::ListContent(uint32_t device
 
 std::unique_ptr<ContentPackage> ContentManager::ResolvePackage(
     const std::string_view root_name, uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data) {
+  std::error_code ec;
   const bool flat =
-      IsFlat(data.content_type) && !std::filesystem::is_directory(FlatPath(data.file_name()));
+      IsFlat(data.content_type) && !std::filesystem::is_directory(FlatPath(data.file_name()), ec);
   if (flat) {
     PrepareFlatMount(data.file_name());
   }
   auto package_path = ResolvePackagePath(xuid, data);
-  if (!std::filesystem::exists(package_path)) {
+  if (!std::filesystem::exists(package_path, ec)) {
     return nullptr;
   }
   auto package = std::make_unique<ContentPackage>(kernel_state_, root_name, data, package_path);
@@ -386,12 +395,13 @@ std::unique_ptr<ContentPackage> ContentManager::ResolvePackage(
 }
 
 bool ContentManager::ContentExists(uint64_t xuid, const XCONTENT_AGGREGATE_DATA& data) {
+  std::error_code ec;
   if (IsFlat(data.content_type)) {
-    return std::filesystem::exists(FlatPath(data.file_name())) ||
-           std::filesystem::exists(FlatMountPath(data.file_name()));
+    return std::filesystem::exists(FlatPath(data.file_name()), ec) ||
+           std::filesystem::exists(FlatMountPath(data.file_name()), ec);
   }
   auto path = ResolvePackagePath(xuid, data);
-  return std::filesystem::exists(path);
+  return std::filesystem::exists(path, ec);
 }
 
 X_RESULT ContentManager::WriteContentHeaderFile(uint64_t xuid, XCONTENT_AGGREGATE_DATA data,
@@ -507,19 +517,20 @@ X_RESULT ContentManager::OpenContent(const std::string_view root_name, uint64_t 
     }
   }
 
-  auto package_path = ResolvePackagePath(xuid, data);
-  if (!std::filesystem::exists(package_path)) {
-    REXSYS_WARN("[guardado] abrir «{}»: no existe {}", data.file_name(),
-                rex::path_to_utf8(package_path));
+  // ResolvePackage prepares a flat save's mount (the hard link to the save
+  // file). This used to check the mount path first, before the mount existed,
+  // so a perfectly good flat save failed to open with FILE_NOT_FOUND.
+  auto package = ResolvePackage(root_name, xuid, data);
+  if (!package) {
+    REXSYS_WARN("[guardado] abrir «{}»: no existe", data.file_name());
     return X_ERROR_FILE_NOT_FOUND;
   }
+  const auto package_path = package->package_path();
   // What the game will find inside. If this says VACIO and the profile is then reported as damaged, the
   // failure was in saving; if it lists the files with their sizes, the failure is in reading them or in
   // the contents themselves.
   REXSYS_INFO("[guardado] abrir «{}» (raiz {}) en {} -> {}", data.file_name(), root_name,
               rex::path_to_utf8(package_path), QueHayDentro(package_path));
-  auto package = ResolvePackage(root_name, xuid, data);
-  assert_not_null(package);
   package->LoadPackageLicenseMask(ResolvePackageHeaderPath(
       data.file_name(), xuid, kernel_state_->title_id(), data.content_type));
   content_license = package->GetPackageLicense();
@@ -527,7 +538,7 @@ X_RESULT ContentManager::OpenContent(const std::string_view root_name, uint64_t 
   {
     auto global_lock = global_critical_region_.Acquire();
     if (open_packages_.count(string::string_key_case(root_name))) {
-      return X_ERROR_ALREADY_EXISTS;
+      return X_ERROR_ALREADY_EXISTS;  // (the package's destructor commits the flat mount)
     }
     open_packages_.insert({string::string_key_case::create(root_name), package.release()});
   }
@@ -876,6 +887,20 @@ void ContentManager::CommitFlatMount(const std::string& name) {
   }
   if (files.size() == 1 && !has_dirs) {
     const auto inner = files[0];
+    // A zero-byte inner file is a save that was being written when the app was
+    // closed (or the old write-buffer build left in RAM): it is not a save.
+    // Remove only the leftover mount. The flat file is the committed save and
+    // may be a good one copied in (the PC build's): deleting it here made the
+    // game ask to create a new save even though a valid one was present.
+    if (std::filesystem::file_size(inner, ec) == 0 && !ec) {
+      std::filesystem::remove_all(mount, ec);
+      std::error_code flat_ec;
+      const auto flat_size = std::filesystem::file_size(file, flat_ec);
+      if (!flat_ec && flat_size == 0) {
+        std::filesystem::remove(file, flat_ec);
+      }
+      return;
+    }
     if (!(std::filesystem::exists(file) && std::filesystem::equivalent(inner, file, ec))) {
       // A new file (or a copy): it becomes the save.
       std::filesystem::rename(inner, file, ec);
@@ -888,6 +913,10 @@ void ContentManager::CommitFlatMount(const std::string& name) {
         }
       }
     }
+    std::error_code tam_ec;
+    const auto tam = std::filesystem::file_size(file, tam_ec);
+    REXSYS_INFO("[guardado] {} guardado en {} ({} bytes)", name, rex::path_to_utf8(file),
+                tam_ec ? 0 : tam);
     const auto inner_name = rex::path_to_utf8(inner.filename());
     const auto sidecar = FlatInfoPath(name, ".file");
     if (inner_name == kFlatDefaultInner) {

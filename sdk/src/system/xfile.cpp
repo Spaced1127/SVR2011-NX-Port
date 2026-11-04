@@ -268,6 +268,15 @@ X_STATUS XFile::Write(uint32_t buffer_guest_address, uint32_t buffer_length, uin
       size_t(byte_offset), &bytes_written);
   if (XSUCCEEDED(result)) {
     position_ += bytes_written;
+    // NtWriteFile extends the file. HostPathFile may still hold the bytes in
+    // RAM, so the entry's size cannot wait for a stat: the save code asks for
+    // it right after writing and would otherwise see 0 and rewrite forever.
+    if (bytes_written) {
+      const uint64_t end = byte_offset + bytes_written;
+      if (end > file_->entry()->size()) {
+        file_->entry()->set_size(static_cast<size_t>(end));
+      }
+    }
   }
 
   XIOCompletion::IONotification notify;
@@ -287,7 +296,11 @@ X_STATUS XFile::Write(uint32_t buffer_guest_address, uint32_t buffer_length, uin
 
 X_STATUS XFile::SetLength(size_t length) {
   std::lock_guard<std::mutex> lock(file_lock_);
-  return file_->SetLength(length);
+  X_STATUS result = file_->SetLength(length);
+  if (XSUCCEEDED(result)) {
+    file_->entry()->set_size(length);
+  }
+  return result;
 }
 
 X_STATUS XFile::Rename(const std::filesystem::path& file_path) {
