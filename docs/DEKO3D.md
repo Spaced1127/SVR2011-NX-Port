@@ -90,16 +90,17 @@ backend for it. plume's deko3d backend is MIT; uam is zlib/MIT/MPL-2.0.
   |---|---|---|---|---|
   | NVK (main) | 1785 / 921.6 / 1866 MHz | ~20 fps | 8.6 ms | 49.8 ms |
   | deko3d | 1963.5 / 998.4 / 1866 MHz | **35 fps** | 6.0 ms | 29.0 ms |
-  | deko3d, recorder off (`replays=false`) | 1963.5 / 998.4 / 2133 MHz | **41–47 fps** | 3.8–4.1 ms | 23–24 ms |
+  | deko3d, recorder off (`replays=false`) | 1963.5 / 998.4 / 2133 MHz | **~51 fps** | 3.7 ms | 19.4 ms |
   | deko3d | stock 1020 / 307.2 / 1331.2 MHz | **33 fps** | 6.3 ms | 30.2 ms |
   | deko3d, `frame_rate=30` | 1963.5 / 998.4 / 1866 MHz | 30 fps | 7.7 ms | 33.3 ms |
 
   The menus run at 60 fps; heavy entrances (878–924 draws) drop to 15–21 fps.
-  With `replays=false` the recorder's per-update work is skipped too: the `104`
-  log measures 41.3–46.6 fps in-ring over five-second windows (50.5 at the
-  start of the match) at draw 3.8–4.1 ms and span 23–24 ms, up from the 35 fps
-  baseline. `frame_rate=30` is worse than 60 because the game's 30 Hz world
-  step does twice the work per frame. The measured profile is **no FSR**:
+  With `replays=false` the recorder's per-update work is skipped: the `107`
+  log measures 50.8–55.4 fps in-ring over five-second windows at draw 3.7 ms
+  and span 19.4 ms (the `104` log, before the present copy list was reused,
+  measured 41.3–46.6 fps). `frame_rate=30` is worse than 60 because the game's
+  30 Hz world step does twice the work per frame. The measured profile is
+  **no FSR**:
   `native_upscale="off"`, `native_render_scale=0.5`,
   `native_scale_effects=true`, `native_record_thread=true`, 720p, 60 Hz
   (`docs/performance-svr2011.toml`). FSR 1 quality 4/5 is active in the
@@ -122,11 +123,12 @@ backend for it. plume's deko3d backend is MIT; uam is zlib/MIT/MPL-2.0.
 - **Match start**: the `103` log's remaining failure was the replay recorder's
   own update (`sub_8217BC90`) still queueing jobs (pass 20 stuck for 10 s) and
   the first in-ring frame closing. With `replays=false` the diagnostic build
-  (`0FD75327…`) skips that update; the `104` run reaches the ring and holds
-  41–47 fps. The 51 KB `00181780173CF87B.vs.s1` whose GLSL tail ended the `103`
-  log compiles on desktop and on aarch64 (qemu) uam with a 1 MB stack and
-  28–49 MB RSS, so it was not the fault. The 16 MB uam stack and the variant
-  trace stay in the build until the next clean cut.
+  (`0FD75327…`) skips that update; the `104` run reaches the ring, and the `107`
+  run (with the present fix) holds 50.8–55.4 fps. The 51 KB
+  `00181780173CF87B.vs.s1` whose GLSL tail ended the `103` log compiles on
+  desktop and on aarch64 (qemu) uam with a 1 MB stack and 28–49 MB RSS, so it
+  was not the fault. The 16 MB uam stack and the variant trace stay in the
+  build until the next clean cut.
 - **Screen-capture freeze**: taking a Capture screenshot in-ring froze the
   console (`104`: logging stops at 05:11:51, the perfil dump shows every thread
   at 0% CPU, no crash report). The present path created a command list per
@@ -136,6 +138,12 @@ backend for it. plume's deko3d backend is MIT; uam is zlib/MIT/MPL-2.0.
   reuses one command list and fence (waiting only for the copy fence, which
   signs before the present), uses three swapchain images, and pauses
   presenting while the applet has no focus (`91C5717B…`).
+- **Match end with replays off**: the `107` match ended at the pinfall but
+  stayed in the end's step 0: the recorder update is skipped, so its update
+  side (`+1504`) never leaves 1 for the 4/6 the 8 s fallback handled. The
+  fallback now forces side 1 to 5 as it did for the Android/Steam Deck states;
+  the celebration and results screen follow without the replay
+  (`13322768…`).
 - **Arena crowd placement**: the Switch's `std::filesystem::copy_file` returns
   `ENOSYS`; the arena overlay's fallback copies are skipped. `arena_crowd=off`
   therefore leaves the stock arena files alone on the Switch (the crowd may

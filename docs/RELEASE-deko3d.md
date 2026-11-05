@@ -49,15 +49,16 @@ In-ring, 60 Hz game logic:
 |---|---|---|---|---|
 | NVK (main) | 1785 / 921.6 / 1866 MHz | ~20 fps | 8.6 ms | 49.8 ms |
 | deko3d | 1963.5 / 998.4 / 1866 MHz | **35 fps** | 6.0 ms | 29.0 ms |
-| deko3d, recorder off (`replays=false`) | 1963.5 / 998.4 / 2133 MHz | **41–47 fps** | 3.8–4.1 ms | 23–24 ms |
+| deko3d, recorder off (`replays=false`) | 1963.5 / 998.4 / 2133 MHz | **~51 fps** | 3.7 ms | 19.4 ms |
 | deko3d | stock 1020 / 307.2 / 1331.2 MHz | **33 fps** | 6.3 ms | 30.2 ms |
 | deko3d, `frame_rate=30` | 1963.5 / 998.4 / 1866 MHz | 30 fps | 7.7 ms | 33.3 ms |
 
 - The menus run at 60 fps; heavy entrances (878–924 draws) drop to 15–21 fps.
-- The recorder-off row is the same profile with `replays=false`, which now also
-  skips the replay recorder's per-update work (`sub_8217BC90`): the `104` log
-  measures 41.3–46.6 fps over five-second windows (50.5 at the start of the
-  match) at draw 3.8–4.1 ms and span 23–24 ms, up from the 35 fps baseline.
+- The recorder-off row is the same profile with `replays=false`, which also
+  skips the replay recorder's per-update work (`sub_8217BC90`). The `107` log
+  measures 50.8–55.4 fps over five-second windows with draw 3.7 ms and span
+  19.4 ms; the `104` log, before the present copy list was reused, measured
+  41.3–46.6 fps.
 - `frame_rate=30` is worse than 60: the game's 30 Hz world step does twice the
   work per frame. Use 60.
 - FSR 1 (`native_upscale="fsr1"`, quality 4/5) is **slower** in the
@@ -103,13 +104,20 @@ In-ring, 60 Hz game logic:
   `sdmc:/svr2011_last_shader.txt` before compiling it, gives the uam thread
   16 MB of stack, and logs up to 96 deko3d memory blocks. The `104` run with
   this build reaches the in-ring scene.
-- Screen-capture fix build (current): `svr2011.nro` 82,770,117 bytes, SHA-256
+- Screen-capture fix build: `svr2011.nro` 82,770,117 bytes, SHA-256
   `91C5717B963A241ADA932B246F48368F5DA2DE597DA92D965D83854856E3DBD7`;
   the shader pack is unchanged. The present path reuses one command list and
   fence instead of creating a list per frame (its destructor's
   `dkQueueWaitIdle` froze the render thread when the Capture button held the
   display), uses three swapchain images, and pauses presenting while the
   applet has no focus.
+- Match-end fix build (current): `svr2011.nro` 82,770,117 bytes, SHA-256
+  `13322768BB9EA32EA9D76E2AE11F270D44FD63F8921F1901F24AC607FC1F35B5`;
+  the shader pack is unchanged. With `replays=false` the recorder update is
+  skipped, so the match end's step 0 waited forever on its update side
+  (`+1504 1`). The 8 s fallback, which already forced the Android/Steam Deck
+  states 4/6 done, now forces side 1 too: the celebration and results screen
+  follow without the replay.
 
 ## Screenshots
 

@@ -184,12 +184,14 @@ REX_HOOK_RAW(sub_82322DA0) {
   // Step 0 waits for the part to finish with the replay worker (+1504 4 ->
   // 5, or 6 -> 0, once the worker's "done"); on Android (and the Steam Deck: the
   // recorder above) the worker can stay unfinished after a win - the match
-  // never ended. On, as the game would: 5 or 0 (the end then goes on; the
-  // highlights' own fallback above covers a recorder that stays busy).
+  // never ended. With replays off the recorder's update (sub_8217BC90) is not
+  // run, so the update's side stays 1 (busy) instead of reaching 4: that is
+  // the same stuck wait. On, as the game would: 5 or 0 (the end then goes on;
+  // the highlights' own fallback above covers a recorder that stays busy).
   const uint32_t side = part ? Rd32(base + part + 1504) : 0;
-  if (state == 0 && (side == 4 || side == 6)) {  // (6: the same wait, then 0)
-    Wr32(base + part + 1504, side == 4 ? 5 : 0);
-    REXLOG_WARN("[svr2011] match end: the replay worker never finished - went on without it");
+  if (state == 0 && (side == 1 || side == 4 || side == 6)) {  // (6: the same wait, then 0)
+    Wr32(base + part + 1504, side == 6 ? 0 : 5);
+    REXLOG_WARN("[svr2011] match end: the replay worker never finished (update side {}) - went on without it", side);
   }
 }
 
