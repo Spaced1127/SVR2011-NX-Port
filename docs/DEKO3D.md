@@ -115,8 +115,10 @@ backend for it. plume's deko3d backend is MIT; uam is zlib/MIT/MPL-2.0.
   after the entrance and reads guest `0xDC` (an unhandled guest access
   violation). The measured profile keeps `replays=false`.
 - **Arena crowd placement**: the Switch's `std::filesystem::copy_file` returns
-  `ENOSYS`; `arena_crowd=off` now uses a plain stream copy for the arena
-  overlay, so the crowd-less arenas are actually placed.
+  `ENOSYS`; the arena overlay's fallback copies are skipped. `arena_crowd=off`
+  therefore leaves the stock arena files alone on the Switch (the crowd may
+  still render). A stream-copy fallback was tried but blocked startup at a
+  black screen and is reverted.
 - **Still open**: the app's Vulkan/ImGui overlays are off on the deko3d path;
   a persistent DKSH cache; a Clang cross-build of the generated code (the
   remaining codegen experiment).
