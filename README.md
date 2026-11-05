@@ -82,10 +82,16 @@ PC produces the NRO from their own game folder. See
 
 ## Screenshots
 
-Screenshots of the deko3d build running on Switch hardware live in
-[docs/screenshots/](docs/screenshots/). They are documentation only, not game
-data used by the build; the release guard allows images only in that folder.
-The maintainer adds the images there.
+The deko3d build running on Switch hardware (handheld, 60 fps menus; the
+system overlay at the top shows the overclocked clocks):
+
+| Title screen | Match select |
+|:---:|:---:|
+| ![Title screen](docs/screenshots/01-title-screen.jpg) | ![Match select](docs/screenshots/02-match-select.jpg) |
+
+More in [docs/screenshots/](docs/screenshots/). They are documentation only,
+not game data used by the build; the release guard allows images only in that
+folder.
 
 ---
 

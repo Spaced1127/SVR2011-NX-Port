@@ -93,9 +93,14 @@ In-ring, 60 Hz game logic:
 
 ## Screenshots
 
-Game screenshots of the deko3d build on Switch hardware are in
-[`docs/screenshots/`](screenshots/). They are documentation only, not build
-inputs or game data; the release guard allows images only under that folder.
+Game screenshots of the deko3d build on Switch hardware (handheld, 1280x720;
+the top overlay shows the overclocked clocks):
+
+- [Title screen](screenshots/01-title-screen.jpg)
+- [KANE VS. HURRICANE match select](screenshots/02-match-select.jpg)
+
+They are documentation only, not build inputs or game data; the release guard
+allows images only under `docs/screenshots/`.
 
 ## Known issues
 
