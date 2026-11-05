@@ -12,7 +12,9 @@ releases must never contain material that belongs to the game's owners.
 - `port/generated/` (the recompiled game C++), `svr2011.exe`, `libmain.so`,
   `rexruntime.dll`, `rexgpu-xenos.dll`, or any prebuilt game binary;
 - a prebuilt `.nro`, `.nsp` or `.xci` that contains the recompiled game code;
-- screenshots, box art, logos, fonts, audio or video from the game;
+- screenshots, box art, logos, fonts, audio or video from the game, except the
+  maintainer's documentation screenshots under `docs/screenshots/` (they are
+  not game assets used by the build);
 - the PC port's release zip, the Android APK, or the game data folder.
 
 `tools/check_no_game_data.py` is the release guard. It must pass before a

@@ -72,6 +72,10 @@ $forbiddenParts = @(
 # marker-aware CMakeLists and the FFmpeg configs); the fetched tree is not in
 # the zip because git archive only takes tracked files.
 
+# Maintainer documentation screenshots of the running port are the one image
+# exception (the same rule as tools/check_no_game_data.py).
+$screenshotPrefix = "docs/screenshots/"
+
 $zip = [System.IO.Compression.ZipFile]::OpenRead($OutFile)
 $bad = New-Object System.Collections.Generic.List[string]
 try {
@@ -80,7 +84,9 @@ try {
         $lower = $name.ToLowerInvariant()
         $leaf = [System.IO.Path]::GetFileName($lower)
         $ext = [System.IO.Path]::GetExtension($lower)
-        if ($forbiddenExt -contains $ext) { $bad.Add("forbidden extension: $name") }
+        if ($forbiddenExt -contains $ext -and -not $lower.StartsWith($screenshotPrefix)) {
+            $bad.Add("forbidden extension: $name")
+        }
         if ($forbiddenNames -contains $leaf) { $bad.Add("forbidden file: $name") }
         foreach ($part in $forbiddenParts) {
             if ($lower.Contains($part)) { $bad.Add("forbidden path '$part': $name") }

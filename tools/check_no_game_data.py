@@ -5,6 +5,9 @@ Run from the repository root, or from CI after checkout. It checks the files
 Git knows about, so fetched third-party sources and ignored build outputs do
 not trigger it.
 
+The one image exception is `docs/screenshots/`: maintainer screenshots of the
+running port, documentation only, never game assets used by the build.
+
 Usage:
     python3 tools/check_no_game_data.py
 """
@@ -58,6 +61,10 @@ FORBIDDEN_PARTS = {
 MAX_FILE_BYTES = 50 * 1024 * 1024
 WARN_FILE_BYTES = 10 * 1024 * 1024
 
+# Documentation screenshots of the running port. They are images, but not game
+# assets used by the build; allow them only in this folder.
+SCREENSHOT_DIR = "docs/screenshots/"
+
 
 def tracked_files(root: Path) -> list[Path]:
     try:
@@ -85,7 +92,7 @@ def main() -> int:
         name = path.name.lower()
         suffix = path.suffix.lower()
 
-        if suffix in FORBIDDEN_EXT:
+        if suffix in FORBIDDEN_EXT and not rel.startswith(SCREENSHOT_DIR):
             errors.append(f"forbidden extension: {rel}")
         if name in FORBIDDEN_NAMES:
             errors.append(f"forbidden file name: {rel}")

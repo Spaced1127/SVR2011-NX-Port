@@ -95,10 +95,22 @@ backend for it. plume's deko3d backend is MIT; uam is zlib/MIT/MPL-2.0.
 
   The menus run at 60 fps; heavy entrances (878–924 draws) drop to 15–21 fps.
   `frame_rate=30` is worse than 60 because the game's 30 Hz world step does
-  twice the work per frame. FSR 1 (`native_upscale="fsr1"`, quality 4) is
-  active at a 288p scene but does not change the CPU-limited fps. `-O3` for
-  the generated code did not move the numbers; PGO instrumentation crashes at
-  startup on the Switch and is not shipped.
+  twice the work per frame. The measured 35 fps profile is **no FSR**:
+  `native_upscale="off"`, `native_render_scale=0.5`,
+  `native_scale_effects=true`, `native_record_thread=true`, 720p, 60 Hz
+  (`docs/performance-svr2011.toml`). FSR 1 quality 4/5 is active in the
+  shader path but measured **~25 fps** — the EASU/RCAS passes cost more on the
+  Switch GPU than the smaller scene saves. `-O3` for the generated code did
+  not move the numbers; PGO instrumentation crashes at startup on the Switch
+  and is not shipped.
+- **Shader/present fixes**: `gl_VertexIndex`/`gl_InstanceIndex` are rewritten
+  to Mesa's `gl_VertexID`/`gl_InstanceID`; present and FSR use bound samplers
+  from the own-constants block (`ownb`) instead of bindless handles. Without
+  these, uam failed the present vertex shader and the renderer fell back to an
+  unscaled 50% scene resolve (the top-left quadrant).
+- **Clean baseline**: tag `deko3d-perf-baseline` (`abe2a66`); the last
+  measured 35 fps build was rebuilt from scratch (host codegen + generated
+  game code + NRO) and the shader pack regenerated (926 converted, 0 skipped).
 - **Still open**: the app's Vulkan/ImGui overlays are off on the deko3d path;
   a persistent DKSH cache; a Clang cross-build of the generated code (the
   remaining codegen experiment).
@@ -126,17 +138,32 @@ deko3d path is selected by `native_backend = "deko3d"` (the default on the
 Switch); `native_backend = "auto"` keeps the emulator's Vulkan backend for
 comparison.
 
+## Working performance profile
+
+The measured 35 fps profile is
+[`performance-svr2011.toml`](performance-svr2011.toml): no FSR,
+`native_render_scale=0.5`, `native_scale_effects=true`,
+`native_record_thread=true`, 720p, 60 Hz. FSR 1 quality 4/5 was ~25 fps in the
+full-screen present build; the EASU/RCAS passes cost more than the smaller
+scene saves. Keep the `dbg_boot`/`dbg_match` lines for the straight-to-match
+test, or remove them for normal menu boot.
+
+Screenshots of the running deko3d build live in
+[`screenshots/`](screenshots/) (documentation only).
+
 ## PGO for the recompiled game code
 
 The generated game code is most of the CPU time. `-O3` alone did not move it;
-profile-guided optimization is the next step. The same build tree must be used
+profile-guided optimization is the next step. **Measured: the instrumented NRO
+crashes at startup on the Switch (libgcov/Horizon), so PGO is not shipped.**
+The flow below is kept for a future attempt. The same build tree must be used
 for both passes.
 
 1. Instrumented NRO. The profile directory is a console path (`sdmc:`):
 
 ```bash
 SVR2011_PGO=generate SVR2011_PGO_DIR="sdmc:/switch/svr2011/pgo" \
-  bash out/build_deko3d.sh
+  bash tools/build_switch.sh --switch
 ```
 
 Copy that NRO to the SD, boot it, play a representative match (menus,
@@ -148,7 +175,7 @@ build tree and the host path:
 
 ```bash
 SVR2011_PGO=use SVR2011_PGO_DIR="/mnt/h/Projects/svr2011-sd2/pgo" \
-  bash out/build_deko3d.sh
+  bash tools/build_switch.sh --switch
 ```
 
 The second NRO is the optimized one. Keep the instrumented NRO for another

@@ -1,8 +1,10 @@
 # WWE SmackDown vs. Raw 2011 — Nintendo Switch deko3d port (source builder)
 
-**Source-only.** No game data, recompiled game code, shader packs, textures,
-screenshots or prebuilt NROs are included. You must own the Xbox 360 game
-(`default.xex`) and build the NRO locally.
+**Source-only.** No game data, recompiled game code, shader packs, textures or
+prebuilt NROs are included. You must own the Xbox 360 game (`default.xex`) and
+build the NRO locally. Maintainer screenshots of the running port live in
+[`docs/screenshots/`](screenshots/) as documentation only; they are not game
+data used by the build.
 
 This is the `deko3d` branch: the native renderer draws and presents on the
 Switch's own GPU API instead of Vulkan/NVK. `main` keeps the working NVK
@@ -53,12 +55,42 @@ In-ring, 60 Hz game logic:
 - The menus run at 60 fps; heavy entrances (878–924 draws) drop to 15–21 fps.
 - `frame_rate=30` is worse than 60: the game's 30 Hz world step does twice the
   work per frame. Use 60.
-- FSR 1 (`native_upscale="fsr1"`, quality 4) is active at a 288p scene but
-  does not change the CPU-limited fps.
+- FSR 1 (`native_upscale="fsr1"`, quality 4/5) is **slower** in the
+  full-screen present build: ~25 fps vs ~35 fps without it. The EASU/RCAS
+  passes cost more on the Switch GPU than the smaller scene saves. The
+  measured 35 fps profile is `native_upscale="off"`, `native_render_scale=0.5`,
+  `native_scale_effects=true`, `native_record_thread=true`, 720p, 60 Hz — kept
+  in [performance-svr2011.toml](performance-svr2011.toml).
+- The `gl_VertexIndex` -> `gl_VertexID` shader rewrite and the `ownb` bound
+  sampler path fixed the present pipeline; before that, the renderer fell back
+  to an unscaled scene resolve (the top-left quadrant) and the FSR passes were
+  not reached.
 - `-O3` for the generated code did not move the numbers; PGO instrumentation
   crashes at startup on the Switch and is not shipped.
 - The main thread is the limit (97% of one A57 core); the phone's 60 fps in the
   Android build is its 3+ GHz big core and faster GPU.
+
+## Reproducible baseline
+
+- Source commit: `abe2a66` (`deko3d-perf-baseline`).
+- Clean build from scratch: `out/host`, `out/switch` and `out/switch-deko3d`
+  removed, then `bash tools/build_switch.sh --switch`; 746/746 host codegen +
+  1054/1054 Switch objects; `-O3` is applied to `svr2011_recomp` after the
+  SDK's `-O2`.
+- Shader pack rebuilt with `tools/deko3d_shaders.py` + `spirv-cross`:
+  926 shaders converted, 0 skipped, 1,511 files.
+- Working settings: [`performance-svr2011.toml`](performance-svr2011.toml).
+- Local build fingerprint (varies with your generated code): `svr2011.nro`
+  82,770,117 bytes, SHA-256
+  `A16E982777981679E5C242D552B42E4A68D714CEFE10CFB4D3412806C3F52ADB`;
+  `shaders.dk.pak` 14,387,537 bytes, SHA-256
+  `3A15F39B263BA45B23E3682C48252C8F1B6BE61EF330A158342F1EC5AE9D94E5`.
+
+## Screenshots
+
+Game screenshots of the deko3d build on Switch hardware are in
+[`docs/screenshots/`](screenshots/). They are documentation only, not build
+inputs or game data; the release guard allows images only under that folder.
 
 ## Known issues
 

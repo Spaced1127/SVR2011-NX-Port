@@ -5,23 +5,26 @@
 This is a native Nintendo Switch homebrew port of the Xbox 360 version of
 *WWE SmackDown vs. Raw 2011*. It is not an emulator: the game's PowerPC code
 is statically recompiled to C++ with [ReXGlue](https://github.com/rexglue/rexglue-sdk)
-and compiled for the Switch with devkitA64/libnx. The native renderer draws
-through Vulkan on [Mesa NVK](https://github.com/danfromtico/mesa-switch); a
-deko3d backend is planned for the performance pass. The deko3d work is
-tracked in [docs/DEKO3D.md](docs/DEKO3D.md).
+and compiled for the Switch with devkitA64/libnx. The native renderer on
+`main` draws through Vulkan on [Mesa NVK](https://github.com/danfromtico/mesa-switch);
+this `deko3d` branch replaces that backend with the Switch's own deko3d API.
+The deko3d work is tracked in [docs/DEKO3D.md](docs/DEKO3D.md), with the
+source-only release notes in [docs/RELEASE-deko3d.md](docs/RELEASE-deko3d.md).
 
 The port is based on the public
 [WWE SmackDown vs. Raw 2011 PC port](https://github.com/KaikoClanworth1/wwe-svr2011-pc)
 by KaikoClanworth1 and contributors, and on the Horizon (Switch) layer of the
 public NFSMW-NX and SA2-NX ReXGlue ports.
 
-> **Status: work in progress, playable on hardware at about 20 fps.** The
-> source builds a 77 MB `svr2011.nro` with devkitA64 + NVK. Boot, menus,
-> save loading, a 1v1 match, controls and attacks work. The current limits are
-> NVK's per-draw cost (about 660 draws and 20 fps in the ring) and save
-> creation on the console, which is still unreliable; a folder save made by
-> the PC build loads correctly. A deko3d branch is the next performance step.
-> See [docs/PORTING_PLAN.md](docs/PORTING_PLAN.md) and
+> **Status: work in progress, playable on hardware.** The `deko3d` branch
+> builds an 82 MB `svr2011.nro`, boots, loads saves and runs a 1v1 match at
+> **~35 fps in-ring on the overclocked console (~33 fps at stock clocks,
+> 60 Hz game logic)**. The `main` NVK build is ~20 fps. The remaining limit is
+> the guest main thread; FSR 1 was measured slower in the full-screen present
+> build, so the measured profile uses no FSR at a 0.5 scene (see
+> [docs/performance-svr2011.toml](docs/performance-svr2011.toml)). Save
+> creation on the console is still unreliable; a folder save made by the PC
+> build loads correctly. See [docs/PORTING_PLAN.md](docs/PORTING_PLAN.md) and
 > [docs/TESTING.md](docs/TESTING.md).
 
 ---
@@ -37,8 +40,10 @@ The release artifacts for this project are source and build/installer tools,
 not a playable NRO containing the game.
 
 Do not open issues or pull requests that attach an ISO, `default.xex`, game
-files, shader packs, textures, audio, video, screenshots of the game, or a
-prebuilt NRO. See [docs/LEGAL.md](docs/LEGAL.md).
+files, shader packs, textures, audio, video, or a prebuilt NRO. Maintainer
+screenshots of the running port live in [docs/screenshots/](docs/screenshots/)
+as documentation only, not as project assets. See
+[docs/LEGAL.md](docs/LEGAL.md).
 
 ## Release model
 
@@ -59,16 +64,28 @@ PC produces the NRO from their own game folder. See
 | Horizon (Switch) ReXGlue SDK layer | Imported (BSD-3-Clause) |
 | Build scaffolding and third-party fetch | Done |
 | Host code generator (`rexglue`) from the user's `default.xex` | Done (403 generated files) |
-| Switch portlibs + NVK + Vulkan build | Done (compiles) |
-| Switch NRO target | **Builds** (77 MB `svr2011.nro`) |
-| Mesa/NVK + Vulkan presentation | Works on hardware |
+| Switch portlibs + deko3d/uam + NVK (emulated GPU) build | Done (compiles) |
+| Switch NRO target | **Builds** (82 MB `svr2011.nro` on the deko3d branch) |
+| deko3d backend + NWindow presentation | Works on hardware: 2D/3D/cube shaders, resolves, present |
+| Mesa/NVK + Vulkan presentation (`main`) | Works on hardware (the ~20 fps reference) |
 | Boot to the main menu | Works |
 | Match, audio, input | Works: 1v1 match loads and plays; attacks and movement work |
 | Saves | A PC-made folder save loads (4.2 MB); creating a save on the console is still slow/unreliable |
-| Performance pass (30 fps target) | ~20 fps in-ring on an overclocked console (CPU 1785 / GPU 921.6 MHz) at 0.5 render scale; NVK is draw-bound. deko3d branch next |
+| deko3d shader conversion | 926 SPIR-V variants converted, 0 skipped (`tools/deko3d_shaders.py`) |
+| Performance (deko3d, 60 Hz logic) | **~35 fps in-ring overclocked / ~33 fps stock** at the 0.5 no-FSR profile; NVK `main` ~20 fps |
+| FSR 1 | Implemented; measured slower (~25 fps) than the no-FSR profile on the full-screen present path |
 | DLC | The port's fake Fan Axxess package hangs the DLC loader; `dlc_fan_axxess = false` |
 | Folder-based Windows builder | Done, tested end-to-end (`Build SVR2011-NX.cmd`) |
 | Source-only release packaging | Done (`tools/package_release.ps1`) |
+
+---
+
+## Screenshots
+
+Screenshots of the deko3d build running on Switch hardware live in
+[docs/screenshots/](docs/screenshots/). They are documentation only, not game
+data used by the build; the release guard allows images only in that folder.
+The maintainer adds the images there.
 
 ---
 

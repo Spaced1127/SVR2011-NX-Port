@@ -228,8 +228,8 @@ Album applet mode does not give the game enough memory.
 ## Release checklist
 
 1. `python3 tools/check_no_game_data.py` passes.
-2. No `port/generated/`, `native_shaders/`, `.nro`, game files or screenshots
-   are tracked.
+2. No `port/generated/`, `native_shaders/`, `.nro`, game files or game
+   screenshots outside `docs/screenshots/` are tracked.
 3. Release notes state the bring-your-own-game model and the title-override
    requirement.
 4. The release contains source and build/installer tools only. Do not attach

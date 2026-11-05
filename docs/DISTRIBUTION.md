@@ -89,7 +89,8 @@ Before publishing a GitHub release:
    `port/generated/`, `port/assets/default.xex`, `third_party/nvk/`,
    `sdk/thirdparty/`, `out/` and `dist/` are absent.
 3. The zip contains no `.nro`, `.xex`, `.iso`, `.pac`, `.bik`, `.spv.pak`,
-   textures, audio, video, saves or screenshots.
+   textures, audio, video or saves; the maintainer documentation images under
+   `docs/screenshots/` are the only images.
 4. Release notes state the bring-your-own-game model and the title-override
    requirement.
 5. Do not attach a prebuilt NRO, a shader pack, or a zip of the staged SD

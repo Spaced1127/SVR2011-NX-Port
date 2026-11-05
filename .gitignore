@@ -105,6 +105,14 @@ logs/
 .cache/
 __pycache__/
 *.pyc
+
+# Maintainer screenshots of the running port (documentation only; the release
+# guard allows images only under this folder).
+!docs/screenshots/
+!docs/screenshots/*.png
+!docs/screenshots/*.jpg
+!docs/screenshots/*.jpeg
+!docs/screenshots/*.webp
 .vs/
 .idea/
 .vscode/
