@@ -111,6 +111,12 @@ backend for it. plume's deko3d backend is MIT; uam is zlib/MIT/MPL-2.0.
 - **Clean baseline**: tag `deko3d-perf-baseline` (`abe2a66`); the last
   measured 35 fps build was rebuilt from scratch (host codegen + generated
   game code + NRO) and the shader pack regenerated (926 converted, 0 skipped).
+- **Replay crash**: with `replays=true`, the game's replay recorder starts
+  after the entrance and reads guest `0xDC` (an unhandled guest access
+  violation). The measured profile keeps `replays=false`.
+- **Arena crowd placement**: the Switch's `std::filesystem::copy_file` returns
+  `ENOSYS`; `arena_crowd=off` now uses a plain stream copy for the arena
+  overlay, so the crowd-less arenas are actually placed.
 - **Still open**: the app's Vulkan/ImGui overlays are off on the deko3d path;
   a persistent DKSH cache; a Clang cross-build of the generated code (the
   remaining codegen experiment).

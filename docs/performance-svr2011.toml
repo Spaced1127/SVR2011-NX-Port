@@ -37,6 +37,10 @@ arena_crowd = "off"
 depth_of_field = false
 motion_blur = false
 unlock_everything = false
+# Instant replays / match-end highlights: the game's replay recorder crashes
+# the guest after the entrance on the port (read of 0xDC). Off keeps the match
+# stable; the measured performance profile also uses it.
+replays = false
 dlc_fan_axxess = false
 # Test: a stuck pass must exit at 60 s, not spend minutes writing a thread dump
 # to the SD card while the console is frozen.

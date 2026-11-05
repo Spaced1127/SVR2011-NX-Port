@@ -85,6 +85,10 @@ In-ring, 60 Hz game logic:
   `A16E982777981679E5C242D552B42E4A68D714CEFE10CFB4D3412806C3F52ADB`;
   `shaders.dk.pak` 14,387,537 bytes, SHA-256
   `3A15F39B263BA45B23E3682C48252C8F1B6BE61EF330A158342F1EC5AE9D94E5`.
+- Bugfix build on top of the baseline (`replays=false` and the arena stream
+  copy): `svr2011.nro` 82,770,117 bytes, SHA-256
+  `7F366790B209FBA0CAD2E078796320B29D06EBFDCC7CC038196FEF3ED63C6F48`;
+  the shader pack is unchanged.
 
 ## Screenshots
 
@@ -94,6 +98,10 @@ inputs or game data; the release guard allows images only under that folder.
 
 ## Known issues
 
+- Instant replays (`replays=true`) crash the guest after the entrance (a read
+  of guest `0xDC` right after the replay recorder starts). The measured profile
+  sets `replays=false`; the replay recorder state machine is a port issue, not
+  a deko3d rendering issue.
 - The app's Vulkan/ImGui overlays (settings, FPS overlay, achievements) are
   not drawn on the deko3d path; the game's own UI is rendered by deko3d.
 - The folder save `Saves/SaveData.dat/SaveData.Dat` loads; creating a new flat
@@ -101,6 +109,9 @@ inputs or game data; the release guard allows images only under that folder.
 - `dlc_fan_axxess=true` hangs in the fake DLC loader; keep it `false`.
 - The stock console is CPU-limited around 33 fps at 60 logic; 60 fps is not
   reachable on the Switch at stock clocks.
+- The Switch's `std::filesystem::copy_file` ends in `ENOSYS` ("Function not
+  implemented"); the arena overlay now uses a stream copy, so
+  `arena_crowd=off` actually places the crowd-less arenas.
 
 ## Licenses
 

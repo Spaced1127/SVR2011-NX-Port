@@ -140,6 +140,18 @@ void Refresh(const std::string& name) {
 
 std::map<std::string, fs::path> g_placed;  // overlay name -> the file asked for
 
+// std::filesystem::copy_file on the Switch's newlib ends in ENOSYS ("Function
+// not implemented"); the overlay is on the SD, where a plain stream copy
+// works. The caller has already removed the destination.
+bool CopyStream(const fs::path& from, const fs::path& to) {
+  std::ifstream in(from, std::ios::binary);
+  if (!in) return false;
+  std::ofstream out(to, std::ios::binary | std::ios::trunc);
+  if (!out) return false;
+  out << in.rdbuf();
+  return bool(out);
+}
+
 // overlay/<name> := link to (or copy of) `source` - with the crowd off
 // (crowd_off.h) its crowd-less copy once made.
 bool Place(const fs::path& requested, const std::string& name) {
@@ -160,9 +172,8 @@ bool Place(const fs::path& requested, const std::string& name) {
   fs::create_hard_link(source, dst, ec);
   if (ec) {
     ec.clear();
-    fs::copy_file(source, dst, fs::copy_options::none, ec);  // (never over an entry: it could be a link)
-    if (ec) {
-      REXLOG_WARN("[svr2011] arena mods: cannot place {} ({})", name, ec.message());
+    if (!CopyStream(source, dst)) {
+      REXLOG_WARN("[svr2011] arena mods: cannot place {} (copy failed)", name);
       return false;
     }
   }
@@ -2024,10 +2035,13 @@ void RedirectArena(int arena, const std::string& file) {
       REXLOG_WARN("[svr2011] arena mods: cannot replace {}", name);
       return;
     }
-    fs::copy_file(source, dst, fs::copy_options::none, ec2);
-    FILE* f = ec2 ? nullptr : std::fopen(dst.string().c_str(), "r+b");
+    if (!CopyStream(source, dst)) {
+      REXLOG_WARN("[svr2011] arena mods: cannot place {} (copy failed)", name);
+      return;
+    }
+    FILE* f = std::fopen(dst.string().c_str(), "r+b");
     if (!f) {
-      REXLOG_WARN("[svr2011] arena mods: cannot place {} ({})", name, ec2.message());
+      REXLOG_WARN("[svr2011] arena mods: cannot place {} (open failed)", name);
       return;
     }
     std::fseek(f, stage_at, SEEK_SET);
