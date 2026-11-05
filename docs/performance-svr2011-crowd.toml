@@ -1,0 +1,74 @@
+# WWE SmackDown vs. Raw 2011 - Nintendo Switch settings: arena crowd test.
+#
+# Identical to the measured profile (performance-svr2011.toml) except
+# arena_crowd = "on": the stock arenas keep their audience, and the crowd's
+# per-frame renderer runs. The measured profile uses "off" to save the GPU and
+# CPU; use this file to check that the audience renders and measure the cost.
+#
+# Rename to svr2011.toml on the SD card.
+# Measured deko3d performance profile (Switch handheld, 720p, 60 Hz game
+# logic): ~51 fps in-ring on the overclocked console (CPU 1963.5 / GPU 998.4 /
+# RAM 2133 MHz); the 107 log measured 50.8-55.4 fps at draw 3.7 ms and span
+# 19.4 ms. The earlier 35 fps figure was the same profile before the replay
+# recorder was skipped and the present copy list reused:
+#   - no FSR: the plain 0.5 scene + present pass is faster than the FSR 1
+#     EASU/RCAS path (FSR quality 4/5 measured ~25 fps on the same build);
+#   - native_record_thread = true (the measured path; the second recording
+#     thread keeps the 6 ms draw recording off the main guest thread);
+#   - native_scale_effects = true, native_upscale = "off", 720p;
+#   - dbg_boot/dbg_match/dbg_entrances boot straight into the EDGE vs KANE
+#     test match. Remove those three lines for a normal menu boot.
+#
+# native_backend defaults to "deko3d" on the Switch in this branch; set it
+# explicitly only when comparing with the emulator's Vulkan backend.
+gpu_plugin = "xenos"
+native_renderer = "main"
+gpu_backend = "vulkan"
+input_backend = "switch"
+resolution = "720p"
+resolution_scale = 1
+fullscreen = true
+vsync = true
+native_max_scale = 1
+native_2x_msaa = false
+native_prepare_pipelines = true
+native_texture_quality = "low"
+native_scale_effects = true
+native_render_scale = 0.5
+native_upscale = "off"
+native_record_thread = true
+switch_gpu_mhz = 0
+input_xbox_layout = true
+native_shadows = false
+arena_crowd = "on"
+depth_of_field = false
+motion_blur = false
+unlock_everything = false
+# Instant replays / match-end highlights: the replay recorder crashes the guest
+# at the match start on the port (read of 0xDC). Off drops the recorder's
+# queued callbacks in frame_rate.cpp and keeps the match stable.
+replays = false
+dlc_fan_axxess = false
+# Test: a stuck pass must exit at 60 s, not spend minutes writing a thread dump
+# to the SD card while the console is frozen.
+svr2011_watchdog_dump = true
+# The first menu load reads many small blocks from the SD card. A larger
+# per-file read-ahead window and more live windows keep the FS service calls
+# down; the exact-range cache stays at its default.
+nfsmw_io_ventana_kb = 1024
+nfsmw_io_ventanas_max = 32
+# The first load also reads many small, non-sequential blocks. Keep a 64 MB
+# block cache (256 KB blocks) and shrink the exact-range cache to 32 MB so the
+# total stays the same.
+nfsmw_io_cache_mb = 64
+nfsmw_io_rangos_mb = 32
+
+# Debug boot: go straight into a match, bypassing the Universe/Now Loading
+# screen. Remove these three lines for a normal menu boot.
+dbg_boot = "match"
+dbg_match = "people=EDGE,KANE attires=1,1 arena=1 rule=0 cpu=all"
+dbg_entrances = false
+
+# Test: skip the render-to-texture write-back/watch that causes the
+# 134k emulated reads/s during the match load.
+native_resolve_write_back = false

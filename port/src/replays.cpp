@@ -49,6 +49,35 @@ void Wr32(uint8_t* p, uint32_t v) {
 }
 }  // namespace
 
+// The first recording callback of a match frees the clips the attract demo
+// (or the previous match) left in the recorder's buffer. One of those clips is
+// half-made on the port and its destructor read guest 0xDC (the 2.1.8 report
+// with replays on). Zero the clip-pointer array once at the match start: the
+// old clips are leaked (small, one match's worth), and the new match records
+// into a clean buffer. The recorder's free is sub_821A0AA8(part + 1496*748):
+// 140 pointers.
+REX_EXTERN(__imp__sub_8217AC50);
+REX_HOOK_RAW(sub_8217AC50) {
+  const uint32_t obj = ctx.r3.u32;
+  if (REXCVAR_GET(replays) && obj) {
+    const uint32_t part = Rd32(base + obj + 156);
+    const uint32_t mode = Rd32(base + obj + 92);
+    const uint32_t side = part ? Rd32(base + part + 1504) : 0;
+    static uint32_t last_clock = 0;
+    static bool cleared = false;
+    const uint32_t clock = Rd32(base + 0x82E3CD0C);
+    if (clock < last_clock) cleared = false;  // (a new match)
+    last_clock = clock;
+    if (mode == 1 && side == 6 && !cleared && clock < 600) {
+      const uint32_t buffer = part + Rd32(base + part + 1496) * 748;
+      for (int i = 0; i < 140; i++) Wr32(base + buffer + i * 4, 0);
+      cleared = true;
+      REXLOG_WARN("[svr2011] replay: cleared the recorder's startup buffer (clock {})", clock);
+    }
+  }
+  __imp__sub_8217AC50(ctx, base);
+}
+
 REX_EXTERN(__imp__sub_8230C2D0);
 REX_EXTERN(__imp__sub_8230C248);
 REX_HOOK_RAW(sub_8230C2D0) {

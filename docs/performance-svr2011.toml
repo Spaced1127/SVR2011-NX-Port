@@ -1,12 +1,13 @@
 # WWE SmackDown vs. Raw 2011 - Nintendo Switch settings.
 #
 # Measured deko3d performance profile (Switch handheld, 720p, 60 Hz game
-# logic): ~35 fps in-ring on the overclocked console (CPU 1963.5 / GPU 998.4 /
-# RAM 1866 MHz), ~33 fps at stock clocks. This is the profile that was
-# measured best on hardware:
+# logic): ~51 fps in-ring on the overclocked console (CPU 1963.5 / GPU 998.4 /
+# RAM 2133 MHz); the 107 log measured 50.8-55.4 fps at draw 3.7 ms and span
+# 19.4 ms. The earlier 35 fps figure was the same profile before the replay
+# recorder was skipped and the present copy list reused:
 #   - no FSR: the plain 0.5 scene + present pass is faster than the FSR 1
 #     EASU/RCAS path (FSR quality 4/5 measured ~25 fps on the same build);
-#   - native_record_thread = true (the 35 fps path; the second recording
+#   - native_record_thread = true (the measured path; the second recording
 #     thread keeps the 6 ms draw recording off the main guest thread);
 #   - native_scale_effects = true, native_upscale = "off", 720p;
 #   - dbg_boot/dbg_match/dbg_entrances boot straight into the EDGE vs KANE

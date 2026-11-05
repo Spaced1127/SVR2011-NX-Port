@@ -144,11 +144,20 @@ backend for it. plume's deko3d backend is MIT; uam is zlib/MIT/MPL-2.0.
   fallback now forces side 1 to 5 as it did for the Android/Steam Deck states;
   the celebration and results screen follow without the replay
   (`13322768…`).
+- **Replay recorder**: with `replays=true` the first recording callback freed
+  the clip buffer the attract demo left behind; one clip's destructor read
+  guest `0xDC`. `replays.cpp` now zeroes the 140 clip pointers once at the
+  match start (side 6, clock < 600) before the original free: the old clips
+  leak (small) and the match records into a clean buffer. Test with
+  [`performance-svr2011-replays.toml`](performance-svr2011-replays.toml); the
+  measured profile keeps replays off for the CPU cost.
 - **Arena crowd placement**: the Switch's `std::filesystem::copy_file` returns
   `ENOSYS`; the arena overlay's fallback copies are skipped. `arena_crowd=off`
-  therefore leaves the stock arena files alone on the Switch (the crowd may
-  still render). A stream-copy fallback was tried but blocked startup at a
-  black screen and is reverted.
+  therefore leaves the stock arena files alone on the Switch while the
+  crowd-less copy is made. Use
+  [`performance-svr2011-crowd.toml`](performance-svr2011-crowd.toml) to render
+  the audience and measure the cost. A stream-copy fallback was tried but
+  blocked startup at a black screen and is reverted.
 - **Still open**: the app's Vulkan/ImGui overlays are off on the deko3d path;
   a persistent DKSH cache; a Clang cross-build of the generated code (the
   remaining codegen experiment).

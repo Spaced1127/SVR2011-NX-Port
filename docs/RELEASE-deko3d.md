@@ -111,13 +111,25 @@ In-ring, 60 Hz game logic:
   `dkQueueWaitIdle` froze the render thread when the Capture button held the
   display), uses three swapchain images, and pauses presenting while the
   applet has no focus.
-- Match-end fix build (current): `svr2011.nro` 82,770,117 bytes, SHA-256
+- Match-end fix build: `svr2011.nro` 82,770,117 bytes, SHA-256
   `13322768BB9EA32EA9D76E2AE11F270D44FD63F8921F1901F24AC607FC1F35B5`;
   the shader pack is unchanged. With `replays=false` the recorder update is
   skipped, so the match end's step 0 waited forever on its update side
   (`+1504 1`). The 8 s fallback, which already forced the Android/Steam Deck
   states 4/6 done, now forces side 1 too: the celebration and results screen
   follow without the replay.
+- Replay/crowd test build (current): `svr2011.nro` 82,770,117 bytes, SHA-256
+  `E7B453277EC3A6E4C39328A09B192CB38760231380E1CA503BB32B6FC62A51DF`;
+  the shader pack is unchanged. `replays.cpp` clears the recorder's 140 clip
+  pointers once at the match start: the first recording callback freed the
+  half-made clip the attract demo left behind (guest read `0xDC`). With
+  `replays=true` the recorder then records and the match-end highlights play.
+  [`performance-svr2011-replays.toml`](performance-svr2011-replays.toml) is
+  the replay test profile; [`performance-svr2011-crowd.toml`](performance-svr2011-crowd.toml)
+  turns the arena crowd on.
+- The working checkpoint and the next steps are in
+  [`STATE.md`](STATE.md); tag `deko3d-match-working` is the known-good
+  match build (`b805d26`).
 
 ## Screenshots
 
@@ -132,12 +144,13 @@ allows images only under `docs/screenshots/`.
 
 ## Known issues
 
-- Instant replays / the replay recorder (`replays=true`) crash the guest at
-  the match start (a read of guest `0xDC` on the replay thread). The
-  `frame_rate` hook now drops the recorder's queued callbacks when
-  `replays=false`, and the match-end highlights are off; the measured profile
-  keeps it off. This is a port replay-recorder issue, not a deko3d rendering
-  issue.
+- Instant replays / the replay recorder were the match-start crash: the first
+  recording callback freed a half-made clip the attract demo left in the
+  recorder's buffer (guest read `0xDC`). `replays.cpp` now clears those 140
+  clip pointers once at the match start. `replays=true` is the test path
+  (`performance-svr2011-replays.toml`); the measured 51 fps profile keeps it
+  off because the recorder costs CPU. Use the `replays=false` path for the
+  measured profile.
 - The app's Vulkan/ImGui overlays (settings, FPS overlay, achievements) are
   not drawn on the deko3d path; the game's own UI is rendered by deko3d.
 - The folder save `Saves/SaveData.dat/SaveData.Dat` loads; creating a new flat
