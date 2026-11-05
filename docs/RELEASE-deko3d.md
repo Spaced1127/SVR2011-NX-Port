@@ -37,9 +37,11 @@ REXGLUE_SWITCH_NVK_SDK=/path/to/nvk/extracted \
 bash tools/build_switch.sh --switch
 ```
 
-Copy `svr2011.nro` and `native_shaders/` (with `shaders.dk.pak`) to the SD
-card. `native_backend = "deko3d"` is the default on the Switch; the Vulkan
-presenter is disabled so deko3d owns the NWindow.
+Copy `svr2011.nro` to the SD root and the shader pack to
+`Game_files/native_shaders/shaders.dk.pak` (`Game_files/` holds your own disc
+files; the NRO finds it beside itself). `native_backend = "deko3d"` is the
+default on the Switch; the Vulkan presenter is disabled so deko3d owns the
+NWindow.
 
 ## Performance (measured on hardware)
 
@@ -62,11 +64,12 @@ In-ring, 60 Hz game logic:
 - `frame_rate=30` is worse than 60: the game's 30 Hz world step does twice the
   work per frame. Use 60.
 - FSR 1 (`native_upscale="fsr1"`, quality 4/5) is **slower** in the
-  full-screen present build: ~25 fps vs ~35 fps without it. The EASU/RCAS
-  passes cost more on the Switch GPU than the smaller scene saves. The
-  measured 35 fps profile is `native_upscale="off"`, `native_render_scale=0.5`,
-  `native_scale_effects=true`, `native_record_thread=true`, 720p, 60 Hz — kept
-  in [performance-svr2011.toml](performance-svr2011.toml).
+  full-screen present build: it measured ~25 fps, and the EASU/RCAS passes cost
+  more on the Switch GPU than the smaller scene saves. The measured profile is
+  `native_upscale="off"`, `native_render_scale=0.5`,
+  `native_scale_effects=true`, `native_record_thread=true`, 720p, 60 Hz,
+  `replays=false`, `arena_crowd="off"` — kept in
+  [performance-svr2011.toml](performance-svr2011.toml).
 - The `gl_VertexIndex` -> `gl_VertexID` shader rewrite and the `ownb` bound
   sampler path fixed the present pipeline; before that, the renderer fell back
   to an unscaled scene resolve (the top-left quadrant) and the FSR passes were
@@ -86,9 +89,9 @@ In-ring, 60 Hz game logic:
 - Shader pack rebuilt with `tools/deko3d_shaders.py` + `spirv-cross`:
   926 shaders converted, 0 skipped, 1,511 files.
 - Working settings: [`performance-svr2011.toml`](performance-svr2011.toml).
-- Local build fingerprint (varies with your generated code): `svr2011.nro`
-  82,770,117 bytes, SHA-256
-  `A16E982777981679E5C242D552B42E4A68D714CEFE10CFB4D3412806C3F52ADB`;
+- Local build fingerprint (varies with your generated code; current
+  `Game_files` layout build): `svr2011.nro` 82,774,213 bytes, SHA-256
+  `9F85C293E0A0767884BAEF7F9834EF79102A071D84421869AA3BDE32D2F83526`;
   `shaders.dk.pak` 14,387,537 bytes, SHA-256
   `3A15F39B263BA45B23E3682C48252C8F1B6BE61EF330A158342F1EC5AE9D94E5`.
 - Replay-fix build (commit `1917a44`: `frame_rate` drops the recorder callbacks
@@ -118,15 +121,11 @@ In-ring, 60 Hz game logic:
   (`+1504 1`). The 8 s fallback, which already forced the Android/Steam Deck
   states 4/6 done, now forces side 1 too: the celebration and results screen
   follow without the replay.
-- Replay/crowd test build (current): `svr2011.nro` 82,770,117 bytes, SHA-256
-  `E7B453277EC3A6E4C39328A09B192CB38760231380E1CA503BB32B6FC62A51DF`;
-  the shader pack is unchanged. `replays.cpp` clears the recorder's 140 clip
-  pointers once at the match start: the first recording callback freed the
-  half-made clip the attract demo left behind (guest read `0xDC`). With
-  `replays=true` the recorder then records and the match-end highlights play.
-  [`performance-svr2011-replays.toml`](performance-svr2011-replays.toml) is
-  the replay test profile; [`performance-svr2011-crowd.toml`](performance-svr2011-crowd.toml)
-  turns the arena crowd on.
+- Current build (Game_files layout): `svr2011.nro` 82,774,213 bytes, SHA-256
+  `9F85C293E0A0767884BAEF7F9834EF79102A071D84421869AA3BDE32D2F83526`;
+  the shader pack is unchanged. The NRO finds `Game_files/` beside itself
+  (falling back to the disc files beside the program when that folder is not
+  there). The SD folder is `Game_files/`, `svr2011.nro` and `svr2011.toml`.
 - The working checkpoint and the next steps are in
   [`STATE.md`](STATE.md); tag `deko3d-match-working` is the known-good
   match build (`b805d26`).
@@ -144,13 +143,11 @@ allows images only under `docs/screenshots/`.
 
 ## Known issues
 
-- Instant replays / the replay recorder were the match-start crash: the first
-  recording callback freed a half-made clip the attract demo left in the
-  recorder's buffer (guest read `0xDC`). `replays.cpp` now clears those 140
-  clip pointers once at the match start. `replays=true` is the test path
-  (`performance-svr2011-replays.toml`); the measured 51 fps profile keeps it
-  off because the recorder costs CPU. Use the `replays=false` path for the
-  measured profile.
+- Instant replays / the replay recorder are **not supported**: the recorder was
+  the match-start crash (guest read `0xDC`) and its recording costs CPU. The
+  measured profile keeps `replays=false`; the match still reaches the
+  celebration and results without the replay. The arena crowd is likewise off
+  in the measured profile (`arena_crowd="off"`).
 - The app's Vulkan/ImGui overlays (settings, FPS overlay, achievements) are
   not drawn on the deko3d path; the game's own UI is rendered by deko3d.
 - The folder save `Saves/SaveData.dat/SaveData.Dat` loads; creating a new flat

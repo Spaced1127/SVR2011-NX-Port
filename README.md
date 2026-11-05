@@ -16,15 +16,18 @@ The port is based on the public
 by KaikoClanworth1 and contributors, and on the Horizon (Switch) layer of the
 public NFSMW-NX and SA2-NX ReXGlue ports.
 
-> **Status: work in progress, playable on hardware.** The `deko3d` branch
-> builds an 82 MB `svr2011.nro`, boots, loads saves and runs a 1v1 match at
-> **~35 fps in-ring on the overclocked console (~33 fps at stock clocks,
-> 60 Hz game logic)**. The `main` NVK build is ~20 fps. The remaining limit is
-> the guest main thread; FSR 1 was measured slower in the full-screen present
-> build, so the measured profile uses no FSR at a 0.5 scene (see
+> **Status: playable on hardware.** The `deko3d` branch builds an 82 MB
+> `svr2011.nro`, boots, loads saves and runs a 1v1 match from the entrance to
+> the results at **~51 fps in-ring on the overclocked console** (the `107` log
+> measures 50.8–55.4 fps with 60 Hz game logic). The `main` NVK build is
+> ~20 fps. The remaining limit is the guest main thread; FSR 1 was measured
+> slower in the full-screen present build, so the measured profile uses no FSR
+> at a 0.5 scene (see
 > [docs/performance-svr2011.toml](docs/performance-svr2011.toml)). Save
-> creation on the console is still unreliable; a folder save made by the PC
-> build loads correctly. See [docs/PORTING_PLAN.md](docs/PORTING_PLAN.md) and
+> overwriting and system screenshots work; creating a new flat-file save on the
+> console is still slow. Instant replays and the arena crowd are off in the
+> measured profile (both cost CPU/GPU, and the replay recorder was the
+> match-start crash). See [docs/PORTING_PLAN.md](docs/PORTING_PLAN.md) and
 > [docs/TESTING.md](docs/TESTING.md).
 
 ---
@@ -69,10 +72,11 @@ PC produces the NRO from their own game folder. See
 | deko3d backend + NWindow presentation | Works on hardware: 2D/3D/cube shaders, resolves, present |
 | Mesa/NVK + Vulkan presentation (`main`) | Works on hardware (the ~20 fps reference) |
 | Boot to the main menu | Works |
-| Match, audio, input | Works: 1v1 match loads and plays; attacks and movement work |
-| Saves | A PC-made folder save loads (4.2 MB); creating a save on the console is still slow/unreliable |
+| Match, audio, input | Works: 1v1 match from the entrance to the results; attacks, movement and the match end work |
+| Saves | A PC-made folder save loads; overwriting works; creating a new flat-file save on the console is still slow/unreliable |
+| System screenshots | Work (the Capture button); the earlier freeze is fixed |
 | deko3d shader conversion | 926 SPIR-V variants converted, 0 skipped (`tools/deko3d_shaders.py`) |
-| Performance (deko3d, 60 Hz logic) | **~35 fps in-ring overclocked / ~33 fps stock** at the 0.5 no-FSR profile; NVK `main` ~20 fps |
+| Performance (deko3d, 60 Hz logic) | **~51 fps in-ring overclocked** at the 0.5 no-FSR profile (50.8–55.4 fps in the `107` log); NVK `main` ~20 fps |
 | FSR 1 | Implemented; measured slower (~25 fps) than the no-FSR profile on the full-screen present path |
 | DLC | The port's fake Fan Axxess package hangs the DLC loader; `dlc_fan_axxess = false` |
 | Folder-based Windows builder | Done, tested end-to-end (`Build SVR2011-NX.cmd`) |
@@ -159,24 +163,31 @@ On Windows, `tools/stage_sd.ps1` assembles this folder from your PC install
 (see [docs/TESTING.md](docs/TESTING.md)). The target layout is:
 
 ```text
-sdmc:/switch/svr2011/
+sdmc:/switch/SVR2011/
+  Game_files/              your own disc files:
+    default.xex
+    nxeart
+    plist360.arc
+    plist360_4x3.arc
+    pac/
+    sound/
+    movies/
+    native_shaders/        generated from your own game, or copied from
+                           your own PC install (user-supplied)
+    pad_icons/             optional, from your own PC install
+    Mods/                  optional, user-supplied mods
+    DLC/                   optional, user-supplied DLC
+    Music/                 optional, user-supplied entrance music
+    Custom Movies/         optional, user-supplied entrance movies
   svr2011.nro              the program (built locally)
   svr2011.toml             settings (written on first start if missing)
-  default.xex              your game's executable (user-supplied)
-  pac/                     game data (user-supplied)
-  sound/                   game data (user-supplied)
-  movies/                  game data (user-supplied)
-  plist360.arc             game data (user-supplied)
-  plist360_4x3.arc         game data (user-supplied)
-  native_shaders/          generated from your own game, or copied from
-                           your own PC install (user-supplied)
-  pad_icons/               optional, from your own PC install
-  Saves/                   created by the game
-  Mods/                    optional, user-supplied .svrmod files
-  DLC/                     optional, user-supplied DLC
-  Music/                   optional, user-supplied entrance music
-  Custom Movies/           optional, user-supplied entrance movies
+  Saves/                   created by the port
+  UserData/                created by the port (cache, crash reports)
+  logs/                    created by the port
 ```
+
+`Game_files/` is detected beside the NRO automatically; a folder without it
+keeps the old "disc files beside the program" layout for the PC build.
 
 Do not redistribute this folder. It contains game data.
 

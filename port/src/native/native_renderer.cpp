@@ -8,6 +8,7 @@
 
 #include "android_perf.h"
 #include "frame_rate.h"
+#include "game_root.h"
 #include "native/native_renderer.h"
 
 #include <algorithm>
@@ -355,7 +356,7 @@ std::filesystem::path ShaderDirectory() {
     dir = v;
     free(v);
   } else {
-    dir = rex::filesystem::GetExecutableFolder() / "native_shaders";
+    dir = svr2011::GameRoot() / "native_shaders";
   }
   return dir;
 }
@@ -1598,11 +1599,11 @@ bool Initialize() {
 #ifdef _WIN32
       // A game folder in the user's Pictures / Documents / Desktop or OneDrive: Windows Controlled folder access
       // blocks programs writing there and OneDrive can keep files online-only or move them.
-      std::string lower = utf8(rex::filesystem::GetExecutableFolder());
+      std::string lower = utf8(svr2011::GameRoot());
       for (char& c : lower) c = char(std::tolower(static_cast<unsigned char>(c)));
       for (const char* place : {"\\pictures", "\\documents", "\\desktop", "\\onedrive"}) {
         if (lower.find(place) != std::string::npos) {
-          reason += " - the game is in " + utf8(rex::filesystem::GetExecutableFolder()) +
+          reason += " - the game is in " + utf8(svr2011::GameRoot()) +
                     ", where Windows Controlled folder access or OneDrive can block or remove its files";
           break;
         }
@@ -3029,7 +3030,7 @@ void StartPrebuildingPipelines(Renderer* r) {
   std::vector<PipelineRecord> records;
   std::unordered_set<uint64_t> seen;
   // (the shipped list beside the exe even when the shaders come from elsewhere: dev runs)
-  const std::filesystem::path shipped = rex::filesystem::GetExecutableFolder() / "native_shaders" / "pipelines.list";
+  const std::filesystem::path shipped = svr2011::GameRoot() / "native_shaders" / "pipelines.list";
   for (const std::filesystem::path& file : {shipped, PlayerPipelineList()}) {
     std::ifstream in(file);
     std::string line;

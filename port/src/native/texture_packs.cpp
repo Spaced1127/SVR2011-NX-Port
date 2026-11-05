@@ -1,6 +1,7 @@
 // WWE SmackDown vs. Raw 2011 - texture dumps and texture packs (see
 // texture_packs.h).
 #include "native/texture_packs.h"
+#include "game_root.h"
 
 #include <algorithm>
 #include <atomic>
@@ -642,7 +643,7 @@ std::vector<uint8_t> EncodePng(const uint8_t* rgba, uint32_t width, uint32_t hei
 
 void Start() {
   std::call_once(g_start_once, [] {
-    g_game = rex::filesystem::GetExecutableFolder();
+    g_game = svr2011::GameRoot();
     // Packs: in the order given; the first that has a texture keeps it.
     std::vector<std::string> packs;
     {

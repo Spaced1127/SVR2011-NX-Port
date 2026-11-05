@@ -9,9 +9,9 @@
 #     EASU/RCAS path (FSR quality 4/5 measured ~25 fps on the same build);
 #   - native_record_thread = true (the measured path; the second recording
 #     thread keeps the 6 ms draw recording off the main guest thread);
-#   - native_scale_effects = true, native_upscale = "off", 720p;
-#   - dbg_boot/dbg_match/dbg_entrances boot straight into the EDGE vs KANE
-#     test match. Remove those three lines for a normal menu boot.
+#   - native_scale_effects = true, native_upscale = "off", 720p.
+#   - For a straight-to-match test, add dbg_boot="match", dbg_match="..." and
+#     dbg_entrances=false; the normal profile boots through the menus.
 #
 # native_backend defaults to "deko3d" on the Switch in this branch; set it
 # explicitly only when comparing with the emulator's Vulkan backend.
@@ -56,12 +56,6 @@ nfsmw_io_ventanas_max = 32
 # total stays the same.
 nfsmw_io_cache_mb = 64
 nfsmw_io_rangos_mb = 32
-
-# Debug boot: go straight into a match, bypassing the Universe/Now Loading
-# screen. Remove these three lines for a normal menu boot.
-dbg_boot = "match"
-dbg_match = "people=EDGE,KANE attires=1,1 arena=1 rule=0 cpu=all"
-dbg_entrances = false
 
 # Test: skip the render-to-texture write-back/watch that causes the
 # 134k emulated reads/s during the match load.

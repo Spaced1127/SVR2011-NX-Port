@@ -361,7 +361,8 @@ Write-Host ""
 Write-Host "Done." -ForegroundColor Green
 Write-Host "SD folder: $OutDir"
 Write-Host "Log:       $log"
-Write-Host "Copy the CONTENTS of the SD folder to sdmc:/switch/svr2011/."
+Write-Host "Copy the CONTENTS of the SD folder to sdmc:/switch/SVR2011/."
+Write-Host "The folder holds Game_files/, svr2011.nro and svr2011.toml."
 Write-Host "Do not upload or share it: it contains your game data."
 
 if (-not $NoOpen) {

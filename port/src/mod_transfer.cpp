@@ -17,6 +17,7 @@
 // thread). The joiner keeps a window of requested ranges: it grows while ranges come back whole and halves
 // when one is late, so a slow or busy link isn't flooded.
 #include "mod_transfer.h"
+#include "game_root.h"
 
 #include <algorithm>
 #include <atomic>
@@ -172,7 +173,7 @@ void RefreshSet() {
   g_gen = gen;
   g_host_mods.clear();
   g_set_text.clear();
-  const fs::path mods = rex::filesystem::GetExecutableFolder() / "Mods";
+  const fs::path mods = svr2011::GameRoot() / "Mods";
   for (const std::string& line : Split(set, '\n')) {
     const auto f = Split(line, '\t');
     if (f.size() < 5 || f[0].rfind("test", 0) == 0) continue;

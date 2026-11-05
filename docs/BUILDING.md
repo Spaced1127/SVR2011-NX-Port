@@ -193,18 +193,18 @@ powershell -ExecutionPolicy Bypass -File tools\stage_sd.ps1 `
 Then copy the contents of that folder to:
 
 ```text
-sdmc:/switch/svr2011/
+sdmc:/switch/SVR2011/
 ```
 
 The layout is described in the top-level `README.md`. At minimum:
 
-- `svr2011.nro`
-- `svr2011.toml`
-- `default.xex`
-- `pac/`, `sound/`, `movies/`, `plist360.arc`, `plist360_4x3.arc`
-- `native_shaders/` generated from your own game, or copied from your own PC
-  install
-- `pad_icons/` (optional, from your own PC install)
+- `Game_files/default.xex`
+- `Game_files/pac/`, `Game_files/sound/`, `Game_files/movies/`,
+  `Game_files/plist360.arc`, `Game_files/plist360_4x3.arc`
+- `Game_files/native_shaders/` generated from your own game, or copied from
+  your own PC install
+- `Game_files/pad_icons/` (optional, from your own PC install)
+- `svr2011.nro` and `svr2011.toml` beside `Game_files/`
 
 Launch the NRO with a **title override** (hold **R** while starting an
 installed game) or a forwarder configured for a **39-bit address space**.
@@ -214,8 +214,9 @@ Album applet mode does not give the game enough memory.
 
 - **The NRO returns to the homebrew menu / crashes at start.** Check that
   you launched with a title override or forwarder, not album applet mode.
-- **Black screen with audio.** Check `native_shaders/`; the native renderer
-  needs the shader pack. The emulated renderer can be used as a fallback.
+- **Black screen with audio.** Check `Game_files/native_shaders/`; the native
+  renderer needs the shader pack. The emulated renderer can be used as a
+  fallback.
 - **First-start stutter.** The driver compiles pipelines on first use; the
   shader/pipeline cache on the SD card makes later sessions smoother.
 - **No controller.** Check the Switch input driver mapping and the

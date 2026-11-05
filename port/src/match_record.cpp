@@ -9,6 +9,8 @@
 // places in a match (replay research: SVR2011_TEST_RAND_LOG / SVR2011_TEST_RAND_FIXED).
 #include "match_record.h"
 
+#include "game_root.h"
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -650,7 +652,7 @@ void Start(PPCContext& ctx, uint8_t* base, uint32_t clock) {  // (under g_rec)
   loaded += fmt::format("\n  random table counters {} / {}\n", base[kSeedCounters], base[kSeedCounters + 1]);
   if (FILE* f = std::fopen((g.dir / "loaded.txt").string().c_str(), "wb")) std::fputs(loaded.c_str(), f), std::fclose(f);
   if (FILE* f = std::fopen((g.dir / "box.txt").string().c_str(), "wb")) std::fclose(f);
-  g.mods = std::thread(ListMods, fs::path(rex::filesystem::GetExecutableFolder()), g.dir, g.used, &g.mod_list);
+  g.mods = std::thread(ListMods, fs::path(svr2011::GameRoot()), g.dir, g.used, &g.mod_list);
   REXLOG_INFO("[svr2011] record: this match in {}", g.dir.string());
 }
 

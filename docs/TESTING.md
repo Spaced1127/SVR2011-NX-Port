@@ -40,30 +40,38 @@ powershell -ExecutionPolicy Bypass -File tools\verify_sd.ps1 `
 ```
 
 It checks the required files and the `pac` (265), `sound` (8) and `movies`
-(87) file counts. If the game logs "360 of the disc's files missing" with a
-list starting at `movies\logo.bik`, the `pac`, `sound` and `movies` folders
-did not finish copying: wait for the copy to finish and run the verifier
-again.
+(87) file counts under `Game_files/`. If the game logs "360 of the disc's
+files missing" with a list starting at `movies\logo.bik`, the `pac`, `sound`
+and `movies` folders did not finish copying: wait for the copy to finish and
+run the verifier again.
 
 ## SD card layout
 
 ```text
-sdmc:/switch/svr2011/
+sdmc:/switch/SVR2011/
+  Game_files/
+    default.xex
+    nxeart
+    plist360.arc
+    plist360_4x3.arc
+    pac/
+    sound/
+    movies/
+    pad_icons/              (optional, from your own PC install)
+    native_shaders/         (shaders.spv.pak, pipelines.list, shaders.dk.pak)
+    Mods/                   (optional)
+    DLC/                    (optional)
+    Music/                  (optional)
+    Custom Movies/          (optional)
   svr2011.nro
   svr2011.toml              (delete the PC one for the first test; see below)
-  default.xex
-  nxeart
-  plist360.arc
-  plist360_4x3.arc
-  pac/
-  sound/
-  movies/
-  pad_icons/                (optional, from your own PC install)
-  native_shaders/           (shaders.spv.pak, pipelines.list)
-  Saves/                    (created by the game)
-  Mods/                     (optional)
-  DLC/                      (optional)
+  Saves/                    (created by the port)
+  UserData/                 (created by the port: cache, crash reports)
+  logs/                     (created by the port)
 ```
+
+The NRO finds `Game_files/` beside itself; without that folder it falls back
+to the disc files beside the program (the PC layout).
 
 Do not redistribute this folder. It contains game data.
 
@@ -105,7 +113,7 @@ Switch.
 ## Logs
 
 The SDK writes its log and crash reports beside the NRO, under `logs/`
-(typically `sdmc:/switch/svr2011/logs/rex/`). If the NRO returns to the
+(typically `sdmc:/switch/SVR2011/logs/rex/`). If the NRO returns to the
 Homebrew Menu or the console shows an error, copy:
 
 - the newest file in `logs/` (or `logs/rex/`),
@@ -123,9 +131,9 @@ or shader packs to a public issue. The log and settings are enough.
 | Symptom | Check |
 |---|---|
 | Returns to the Homebrew Menu immediately | Launched in applet mode, or the NRO hit an early exception; use a title override/forwarder and read `logs/`. |
-| Black screen, no audio | Missing `native_shaders/shaders.spv.pak`; missing game files; check the log for the renderer/game-file messages. |
+| Black screen, no audio | Missing `Game_files/native_shaders/shaders.spv.pak`; missing game files; check the log for the renderer/game-file messages. |
 | Black screen with audio | Renderer/presenter issue; the log's GPU report and swapchain lines matter. |
-| "game files missing" | The game folder lacks `default.xex`, `pac/`, `sound/`, `movies/`, `plist360*.arc` or `nxeart`; reinstall with the PC launcher. |
+| "game files missing" | `Game_files/` lacks `default.xex`, `pac/`, `sound/`, `movies/`, `plist360*.arc` or `nxeart`; reinstall with the PC launcher. |
 | No controller | `input_backend` must be `switch`; the libnx pad driver is the only one built. |
 | Out of memory / thread creation failure | Use a forwarder or title override; close other software. |
 | Crash after a few seconds | Copy `logs/rex/rex_crash.log` and the Atmosphère report. |

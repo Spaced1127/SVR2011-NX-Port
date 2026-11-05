@@ -23,6 +23,7 @@
 //    these;
 //  - the merged bank is handed to the match loader instead of the file's.
 #include "crowd_signs.h"
+#include "game_root.h"
 #include "no_mods.h"
 
 #include <algorithm>
@@ -72,7 +73,7 @@ svrfmt::Bytes SignEntry(const fs::path& dds) {
 void LoadPacks() {
   if (svr2011::NoMods()) return;  // (Start Without Mods: no_mods.h)
   std::error_code ec;
-  const fs::path dir = rex::filesystem::GetExecutableFolder() / "Mods" / "Signs";
+  const fs::path dir = svr2011::GameRoot() / "Mods" / "Signs";
   std::vector<fs::path> packs;
   for (const auto& e : fs::directory_iterator(dir, ec))
     if (e.is_directory() && !fs::exists(e.path() / "disabled", ec)) packs.push_back(e.path());
@@ -97,7 +98,7 @@ void LoadPacks() {
 bool BuildBank(rex::memory::Memory* memory) {
   svrfmt::Bytes d;
   svrfmt::Epac e;
-  const fs::path pac = rex::filesystem::GetExecutableFolder() / "pac" / "audience.pac";
+  const fs::path pac = svr2011::GameRoot() / "pac" / "audience.pac";
   if (!svrfmt::ReadFile(pac.string(), d) || !svrfmt::EpacRead(d, e)) return false;
   const svrfmt::Bytes* bord = nullptr;
   for (const auto& g : e.groups)

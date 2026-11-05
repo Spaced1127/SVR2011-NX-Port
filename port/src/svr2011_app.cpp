@@ -34,6 +34,7 @@
 #include <rex/input/input_system.h>
 
 #include "achievements_page.h"
+#include "game_root.h"
 #include "jukebox.h"
 #include "backgrounds_page.h"
 #include "weapons_page.h"
@@ -315,11 +316,15 @@ std::vector<std::string> g_settings_notes;
 std::filesystem::path g_user_data;
 std::filesystem::path g_saves;
 
+// The game root (game_root.h): <exe>/Game_files when that folder exists, else
+// the NRO's folder. Set in OnConfigurePaths before anything reads the disc.
+// (The inline variable itself is defined in game_root.h.)
+
 // The disc's files the game folder lacks (online_files.h MissingGameFiles), at start: logged; one the game can't
 // start without stops it here with a message (Windows) - it crashed 0.3 s in otherwise, a read of guest 0x28 with
 // pac\_startup.pac and plist360.h missing (2.1.7 report ea8202). Not for another game's data (--game_data_root:
 // the Anthology's). (Test aid SVR2011_TEST_NO_DIALOGS=1: no box.)
-bool g_disc_data_beside = false;  // (the game data is the folder beside the program)
+bool g_disc_data_beside = false;  // (the game data is ours: Game_files/ or the folder beside the program)
 void CheckGameFilesThere() {
   if (!g_disc_data_beside) return;
   const auto missing = svr2011::MissingGameFiles();
@@ -332,12 +337,12 @@ void CheckGameFilesThere() {
   }
   if (!essential) {
     REXLOG_WARN("game files: {} of the disc's files missing from {}: {}", missing.size(),
-                rex::filesystem::GetExecutableFolder().string(), list);
+                svr2011::GameRoot().string(), list);
     return;
   }
   REXLOG_ERROR("game files: {} of the disc's files missing from {} ({} the game can't start without): {}"
                " - not started (reinstall from the Xbox 360 disc image: launcher Install, then Verify game files)",
-               missing.size(), rex::filesystem::GetExecutableFolder().string(), essential, list);
+               missing.size(), svr2011::GameRoot().string(), essential, list);
   rex::FlushLogging();
 #if defined(_WIN32)
   if (!std::getenv("SVR2011_TEST_NO_DIALOGS")) {
@@ -379,12 +384,16 @@ void Svr2011App::OnConfigurePaths(rex::PathConfig& paths) {
 
   const std::filesystem::path exe_dir = rex::filesystem::GetExecutableFolder();
 
-  // The disc files live beside the program unless --game_data_root says
-  // otherwise.
+  // The disc files live in Game_files/ beside the program (the SD layout), or
+  // beside the program when there is no Game_files folder (the PC layout and
+  // older staging folders). --game_data_root still wins when given.
   if (paths.game_data_root.empty()) {
-    paths.game_data_root = exe_dir;
+    std::error_code ec;
+    const std::filesystem::path game_files = exe_dir / "Game_files";
+    paths.game_data_root = std::filesystem::is_directory(game_files, ec) ? game_files : exe_dir;
     g_disc_data_beside = true;
   }
+  svr2011::g_game_root_path = paths.game_data_root;
   paths.user_data_root = exe_dir / "UserData";
   // Tests: SVR2011_USER_DATA=<folder> keeps their saves away from the player's.
   if (std::string dir = Env("SVR2011_USER_DATA"); !dir.empty()) {
@@ -681,13 +690,13 @@ void Svr2011App::OnPostLoadXexImage() {
 #define SVR2011_BUILD_COMMIT "unknown"
 #endif
     REXLOG_INFO("==== SvR 2011 PC port {} (build {}) ====", SVR2011_PORT_VERSION, SVR2011_BUILD_COMMIT);
-    REXLOG_INFO("game folder: {}", rex::filesystem::GetExecutableFolder().string());
+    REXLOG_INFO("game folder: {}", svr2011::GameRoot().string());
 #if defined(_WIN32)
     // (src/utf8.manifest: Windows before 10 version 1903 ignores the UTF-8
     // code page, and a game folder with other letters than A-Z can't be
     // opened everywhere - unread settings, a black screen at the start)
     if (GetACP() != CP_UTF8) {
-      const std::u16string folder = rex::filesystem::GetExecutableFolder().u16string();
+      const std::u16string folder = svr2011::GameRoot().u16string();
       if (std::any_of(folder.begin(), folder.end(), [](char16_t c) { return c > 0x7F; }))
         REXLOG_WARN("game folder: its name has letters other than A-Z, which this Windows (before 10 version "
                     "1903) can't open everywhere - if the game starts to a black screen, move it to a folder "
@@ -797,7 +806,7 @@ void Svr2011App::OnPostLoadXexImage() {
   }
 
   // The port's text and menu changes to the installed disc files (once).
-  svr2011::PatchGameFiles(rex::filesystem::GetExecutableFolder());
+  svr2011::PatchGameFiles(svr2011::GameRoot());
 
   // The saves folder chosen in the settings (saves_folder; the launcher's
   // Saves tab sets it). Read here: the settings are loaded after
@@ -822,15 +831,14 @@ void Svr2011App::OnPostLoadXexImage() {
 
   // DLC packages the launcher put in "DLC" (dlc.h).
   {
-    const std::filesystem::path exe_dir = rex::filesystem::GetExecutableFolder();
     // (the user data the content goes to: <game>\UserData, or a test's)
-    svr2011::InstallDlc(runtime()->kernel_state(), exe_dir / "DLC", g_user_data);
+    svr2011::InstallDlc(runtime()->kernel_state(), svr2011::GameRoot() / "DLC", g_user_data);
   }
 
   // USER PLAYLIST entrance music from the Music folder (music.h); tests:
   // SVR2011_MUSIC=<folder>.
   {
-    std::filesystem::path music = rex::filesystem::GetExecutableFolder() / "Music";
+    std::filesystem::path music = svr2011::GameRoot() / "Music";
     if (std::string dir = Env("SVR2011_MUSIC"); !dir.empty()) music = dir;
     svr2011::InstallUserMusic(music);
   }
@@ -838,7 +846,7 @@ void Svr2011App::OnPostLoadXexImage() {
   // USER MOVIES entrance movies from the Custom Movies folder, mounted as
   // umovie: (user_movies.h); tests: SVR2011_MOVIES=<folder>.
   {
-    std::filesystem::path movies = rex::filesystem::GetExecutableFolder() / "Custom Movies";
+    std::filesystem::path movies = svr2011::GameRoot() / "Custom Movies";
     if (std::string dir = Env("SVR2011_MOVIES"); !dir.empty()) movies = dir;
     svr2011::InstallCaeModMotions(runtime()->memory());  // (CREATE AN ENTRANCE's MODS rows)
     svr2011::InstallCamModMoves(runtime()->memory());    // (CREATE A MOVE-SET's MOD rows)

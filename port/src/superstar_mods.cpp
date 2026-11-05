@@ -24,6 +24,7 @@
 //   mods are.
 // The select screen shows them in the EXTRA list (managers.cpp, the M tile).
 #include "cae_mod_motions.h"
+#include "game_root.h"
 #include "no_mods.h"
 #include "caw_limits.h"
 #include "mem_trace.h"
@@ -3296,7 +3297,7 @@ namespace svr2011 {
 void CopySuperstarMovies(const std::filesystem::path& movies) {
   if (svr2011::NoMods()) return;  // (Start Without Mods: no_mods.h)
   std::error_code ec;
-  const fs::path dir = rex::filesystem::GetExecutableFolder() / "Mods" / "Superstars";
+  const fs::path dir = svr2011::GameRoot() / "Mods" / "Superstars";
   for (const auto& e : fs::directory_iterator(dir, ec)) {
     if (!e.is_directory() || fs::exists(e.path() / "disabled", ec)) continue;
     const std::string folder = e.path().filename().string();
@@ -3342,7 +3343,7 @@ void InstallSuperstarMods(rex::memory::Memory* memory, rex::filesystem::VirtualF
         }
       }
     }).detach();
-  g_game = rex::filesystem::GetExecutableFolder();
+  g_game = svr2011::GameRoot();
   LoadMods();
   LoadAttireMods();
   // the attires' COS pairs and names (string ids kAttireNameIds + mod * 4 + attire)

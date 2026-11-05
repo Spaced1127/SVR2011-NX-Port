@@ -48,6 +48,7 @@
 // instead of sub_82595428). Unchanged entries are streamed from the original
 // files; changed ones are re-compressed (real BPE).
 #include "move_packs.h"
+#include "game_root.h"
 #include "no_mods.h"
 #include "superstar_mods.h"
 #include "startup_pump.h"
@@ -1761,7 +1762,7 @@ bool EntranceScriptExists(int n) {
   static const std::set<int> stock = [] {
     std::set<int> s;
     std::error_code ec;
-    for (const auto& e : fs::directory_iterator(rex::filesystem::GetExecutableFolder() / "pac" / "evt", ec)) {
+    for (const auto& e : fs::directory_iterator(svr2011::GameRoot() / "pac" / "evt", ec)) {
       std::ifstream in(e.path(), std::ios::binary);
       Bytes head(0x4000);
       if (!in.read(reinterpret_cast<char*>(head.data()), 0x4000) || std::memcmp(head.data(), "EPK8", 4)) continue;
@@ -1788,7 +1789,7 @@ void InstallMovePacks(rex::filesystem::VirtualFileSystem* vfs, const fs::path& d
     g_folder = v;
     return;
   }
-  const fs::path game = rex::filesystem::GetExecutableFolder();
+  const fs::path game = svr2011::GameRoot();
   if (svr2011::NoMods()) {  // (Start Without Mods: the overlay left as it is, the stock tables - no_mods.h)
     REXLOG_INFO("[svr2011] move packs: started without mods - none merged, the overlay kept");
     LoadMoveTables(game);

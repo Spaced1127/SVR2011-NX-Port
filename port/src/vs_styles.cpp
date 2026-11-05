@@ -18,6 +18,7 @@
 // game resolves every theme's names once, at start (the VS screen only checks
 // they exist), so the setting applies from the next start.
 #include "vs_styles.h"
+#include "game_root.h"
 #include "no_mods.h"
 
 #include <algorithm>
@@ -54,7 +55,7 @@ std::vector<Style> g_styles;
 std::vector<std::pair<std::string, std::string>> g_list;
 rex::memory::Memory* g_memory = nullptr;
 
-fs::path Game() { return rex::filesystem::GetExecutableFolder(); }
+fs::path Game() { return svr2011::GameRoot(); }
 
 uint32_t GuestString(const std::string& s) {
   const uint32_t at = g_memory->SystemHeapAlloc(uint32_t(s.size() + 1));

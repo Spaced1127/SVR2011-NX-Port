@@ -22,6 +22,7 @@
 // table (as if not installed).
 
 #include "online_mods.h"
+#include "game_root.h"
 #include "no_mods.h"
 
 #include <algorithm>
@@ -122,7 +123,7 @@ const Mine& MyMods() {
       m.key_of[id] = key, m.id_of[key] = id, m.label[key] = label;
     }
     std::error_code ec;
-    for (const auto& e : fs::directory_iterator(rex::filesystem::GetExecutableFolder() / "Mods" / "Arenas", ec)) {
+    for (const auto& e : fs::directory_iterator(svr2011::GameRoot() / "Mods" / "Arenas", ec)) {
       const std::string folder = e.path().filename().string();
       std::string key, label;
       if (!e.is_directory() || hidden.count(folder) || !svr2011::ModKey("Arenas", folder, &key, &label)) continue;
@@ -134,7 +135,7 @@ const Mine& MyMods() {
       if (hidden.count(folder) || !svr2011::ModKey(kind, folder, &key, &label)) continue;
       m.pack_of["pack:" + key] = {kind, folder}, m.label["pack:" + key] = label;
     }
-    for (const auto& e : fs::directory_iterator(rex::filesystem::GetExecutableFolder() / "Mods" / "Backstage", ec)) {
+    for (const auto& e : fs::directory_iterator(svr2011::GameRoot() / "Mods" / "Backstage", ec)) {
       if (svr2011::BackstageModsOff()) break;  // (no_mods.h: none offered)
       const std::string folder = e.path().filename().string();
       std::string key, label;

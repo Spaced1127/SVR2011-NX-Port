@@ -46,8 +46,9 @@ and build tools only, which is the policy in [LEGAL.md](LEGAL.md).
    `sound` and `movies`).
 4. Wait. The first build takes 15-40 minutes; later builds are incremental.
 5. The builder leaves an SD folder in
-   `%LOCALAPPDATA%\SVR2011-NX\dist`. Copy its **contents** to
-   `sdmc:/switch/svr2011/` on the SD card.
+   `%LOCALAPPDATA%\SVR2011-NX\dist`, laid out as `Game_files/`,
+   `svr2011.nro` and `svr2011.toml`. Copy its **contents** to
+   `sdmc:/switch/SVR2011/` on the SD card.
 6. Launch with a title override (hold **R** while starting an installed game)
    or a forwarder with a 39-bit address space. Album applet mode does not give
    the game enough memory.

@@ -23,6 +23,7 @@
 // 256 A8R8G8B8) turns transparent.
 
 #include "backgrounds_page.h"
+#include "game_root.h"
 #include "no_mods.h"
 
 #include <algorithm>
@@ -109,7 +110,7 @@ uint32_t Rd32(const uint8_t* p) { return uint32_t(p[0]) << 24 | uint32_t(p[1]) <
 void Wr32(uint8_t* p, uint32_t v) { p[0] = uint8_t(v >> 24), p[1] = uint8_t(v >> 16), p[2] = uint8_t(v >> 8), p[3] = uint8_t(v); }
 uint32_t Le32(const uint8_t* p) { return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24; }
 
-fs::path Folder() { return rex::filesystem::GetExecutableFolder() / "Mods" / "Backgrounds"; }
+fs::path Folder() { return svr2011::GameRoot() / "Mods" / "Backgrounds"; }
 
 std::string Upper(std::string t) {
   for (char& c : t) c = char(std::toupper(static_cast<unsigned char>(c)));

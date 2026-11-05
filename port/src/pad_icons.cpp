@@ -21,6 +21,7 @@
 // that version's data instead.
 
 #include "pad_icons.h"
+#include "game_root.h"
 #include "mystery_opponent.h"
 
 #include <algorithm>
@@ -379,7 +380,7 @@ std::mutex g_copies_mutex;
 std::map<std::pair<uint32_t, Kind>, Copy> g_copies;
 
 bool Load() {
-  const auto dir = rex::filesystem::GetExecutableFolder() / "pad_icons";
+  const auto dir = svr2011::GameRoot() / "pad_icons";
   std::ifstream in(dir / "pad_icons.txt");
   if (!in) return false;
   std::ifstream bin(dir / "sprites.bin", std::ios::binary);

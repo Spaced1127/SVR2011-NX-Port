@@ -22,6 +22,7 @@
 // menu/MatchHD.pac (MENU/MASI), kept in guest physical memory (4 KB view)
 // untiled, with 16-bit words byte-swapped.
 #include "backgrounds_page.h"
+#include "game_root.h"
 #include "arena_lights.h"
 #include "no_mods.h"
 #include "weapon_mods.h"
@@ -2090,7 +2091,7 @@ void InstallArenaMods(rex::memory::Memory* memory, rex::filesystem::VirtualFileS
   g_memory = memory;
   GrowArenaHeap(memory);
   g_fs = fs;
-  g_game = rex::filesystem::GetExecutableFolder();
+  g_game = svr2011::GameRoot();
   g_overlay = g_game / "Mods" / "ArenaOverlay";
   g_bpe_log = std::getenv("SVR2011_TEST_BPE_LOG") != nullptr;
   if (crowd::Off()) {

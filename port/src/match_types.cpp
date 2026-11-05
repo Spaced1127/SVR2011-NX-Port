@@ -13,6 +13,7 @@
 // display order; flag 2 at +0x3C marks the group's last row; a submenu finds
 // its rows by their parent node, +0x38). No file size limit applies.
 #include "match_diag.h"
+#include "game_root.h"
 #include "match_types.h"
 #include "mystery_opponent.h"
 #include "no_mods.h"
@@ -912,7 +913,7 @@ namespace svr2011 {
 const std::map<std::string, bool>& MatchTypeSwitches() {
   static const std::map<std::string, bool> on = [] {
     std::map<std::string, bool> m;
-    const std::filesystem::path dir = rex::filesystem::GetExecutableFolder() / "Mods" / "MatchTypes";
+    const std::filesystem::path dir = svr2011::GameRoot() / "Mods" / "MatchTypes";
     std::error_code ec;
     for (const char* k : {"falls_count_anywhere", "championship_scramble", "royal_rumble_15_25", "lumberjack",
                           "free_roaming_backstage", "backstage_more_people", "weapons_everywhere", "slobber_knocker",

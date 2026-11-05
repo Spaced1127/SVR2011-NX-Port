@@ -14,9 +14,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$GameDir,
 
-    [string]$Nro = (Join-Path $PSScriptRoot "..\out\switch\svr2011.nro"),
+    [string]$Nro = "",
 
-    [string]$OutDir = (Join-Path (Split-Path $PSScriptRoot -Parent | Split-Path -Parent) "svr2011-sd"),
+    [string]$OutDir = "",
 
     # Only print what would be copied.
     [switch]$DryRun,
@@ -26,6 +26,13 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# Resolved here, not in the param defaults: $PSScriptRoot is not always set
+# when Windows PowerShell evaluates them with a relative -File path.
+if (-not $Nro) { $Nro = Join-Path $PSScriptRoot "..\out\switch\svr2011.nro" }
+if (-not $OutDir) {
+    $OutDir = Join-Path (Split-Path $PSScriptRoot -Parent | Split-Path -Parent) "svr2011-sd"
+}
 
 function Fail([string]$Message) {
     Write-Error $Message
@@ -82,7 +89,11 @@ if ($missing.Count -gt 0) {
 # valid on the console and would leave the pad dead.
 $toml = @'
 # WWE SmackDown vs. Raw 2011 - Nintendo Switch settings.
-# Written by tools/stage_sd.ps1. Tune the GPU block for your console.
+# Written by tools/stage_sd.ps1. The SD layout:
+#   SVR2011/Game_files/   your own disc files (default.xex, pac, sound, ...)
+#   SVR2011/svr2011.nro
+#   SVR2011/svr2011.toml
+# Tune the GPU block for your console.
 gpu_plugin = "xenos"
 native_renderer = "main"
 gpu_backend = "vulkan"
@@ -91,9 +102,9 @@ resolution = "720p"
 resolution_scale = 1
 fullscreen = true
 vsync = true
-# Performance defaults for the NVK renderer: half-resolution scene with the
-# effects scaled with it, the crowd and shadows off, command recording on its
-# own thread.
+# The measured deko3d profile: a half-resolution scene with the effects
+# scaled with it, no FSR, the crowd and shadows off, command recording on its
+# own thread. Measured ~51 fps in-ring on the overclocked console.
 native_max_scale = 1
 native_2x_msaa = false
 native_prepare_pipelines = true
@@ -106,9 +117,9 @@ native_shadows = false
 arena_crowd = "off"
 depth_of_field = false
 motion_blur = false
-# 460 = the official handheld GPU profile. Set 0 to leave the clocks alone
-# when the console is overclocked with sys-clk.
-switch_gpu_mhz = 460
+# 0 leaves the clocks to sys-clk (the measured console runs 1963.5 / 998.4 /
+# 2133 MHz). 460 is the official handheld GPU profile without an overclock.
+switch_gpu_mhz = 0
 # true: face buttons by position (Switch bottom = Xbox A), as on an Xbox pad.
 # false: by letter (Switch A = Xbox A).
 input_xbox_layout = true
@@ -116,36 +127,42 @@ input_xbox_layout = true
 # leave it off. unlock_everything is off for the same reason.
 unlock_everything = false
 dlc_fan_axxess = false
-svr2011_watchdog_dump = false
+# Instant replays / match-end highlights are off in the measured profile: the
+# recorder costs CPU and was the match-start crash. A match still ends without
+# the replay.
+replays = false
+svr2011_watchdog_dump = true
 # Save reads: a folder save (Saves/SaveData.dat/SaveData.Dat) loads without a
 # copy; the flat-file form is still slow on the console.
 nfsmw_io_ventana_kb = 1024
 nfsmw_io_ventanas_max = 32
 nfsmw_io_cache_mb = 64
 nfsmw_io_rangos_mb = 32
-native_resolve_write_back = true
+# Skip the render-to-texture write-back/watch that caused 134k emulated
+# reads/s during the match load.
+native_resolve_write_back = false
 '@
 
 $copies = @(
     @{ From = $Nro; To = "svr2011.nro"; Kind = "file" },
-    @{ From = (Join-Path $GameDir "default.xex"); To = "default.xex"; Kind = "file" },
-    @{ From = (Join-Path $GameDir "nxeart"); To = "nxeart"; Kind = "file" },
-    @{ From = (Join-Path $GameDir "plist360.arc"); To = "plist360.arc"; Kind = "file" },
-    @{ From = (Join-Path $GameDir "plist360_4x3.arc"); To = "plist360_4x3.arc"; Kind = "file" },
-    @{ From = (Join-Path $GameDir "pac"); To = "pac"; Kind = "dir" },
-    @{ From = (Join-Path $GameDir "sound"); To = "sound"; Kind = "dir" },
-    @{ From = (Join-Path $GameDir "movies"); To = "movies"; Kind = "dir" },
-    @{ From = (Join-Path $GameDir "native_shaders"); To = "native_shaders"; Kind = "dir" }
+    @{ From = (Join-Path $GameDir "default.xex"); To = "Game_files\default.xex"; Kind = "file" },
+    @{ From = (Join-Path $GameDir "nxeart"); To = "Game_files\nxeart"; Kind = "file" },
+    @{ From = (Join-Path $GameDir "plist360.arc"); To = "Game_files\plist360.arc"; Kind = "file" },
+    @{ From = (Join-Path $GameDir "plist360_4x3.arc"); To = "Game_files\plist360_4x3.arc"; Kind = "file" },
+    @{ From = (Join-Path $GameDir "pac"); To = "Game_files\pac"; Kind = "dir" },
+    @{ From = (Join-Path $GameDir "sound"); To = "Game_files\sound"; Kind = "dir" },
+    @{ From = (Join-Path $GameDir "movies"); To = "Game_files\movies"; Kind = "dir" },
+    @{ From = (Join-Path $GameDir "native_shaders"); To = "Game_files\native_shaders"; Kind = "dir" }
 )
 
 if (Test-Path -LiteralPath (Join-Path $GameDir "pad_icons")) {
-    $copies += @{ From = (Join-Path $GameDir "pad_icons"); To = "pad_icons"; Kind = "dir" }
+    $copies += @{ From = (Join-Path $GameDir "pad_icons"); To = "Game_files\pad_icons"; Kind = "dir" }
 }
 if ($IncludeOptional) {
     foreach ($name in @("Mods", "DLC", "Music", "Custom Movies")) {
         $src = Join-Path $GameDir $name
         if (Test-Path -LiteralPath $src) {
-            $copies += @{ From = $src; To = $name; Kind = "dir" }
+            $copies += @{ From = $src; To = "Game_files\$name"; Kind = "dir" }
         }
     }
 }
@@ -183,6 +200,7 @@ if ($DryRun) {
 }
 
 New-Item -ItemType Directory -Force -Path $outFull | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $outFull "Game_files") | Out-Null
 foreach ($c in $copies) {
     $dst = Join-Path $outFull $c.To
     if ($c.Kind -eq "dir") {
@@ -199,5 +217,6 @@ foreach ($c in $copies) {
 
 Write-Host ""
 Write-Host "Done: $outFull"
-Write-Host "Copy the CONTENTS of that folder to sdmc:/switch/svr2011/ on the SD card."
+Write-Host "Copy the CONTENTS of that folder to sdmc:/switch/SVR2011/ on the SD card:"
+Write-Host "  Game_files/  svr2011.nro  svr2011.toml"
 Write-Host "Do not upload or share the folder: it contains game data."

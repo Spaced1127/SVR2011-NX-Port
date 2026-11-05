@@ -35,7 +35,9 @@ $expectedCounts = @{
 }
 $requiredRoot = @(
     "svr2011.nro",
-    "svr2011.toml",
+    "svr2011.toml"
+)
+$requiredGame = @(
     "default.xex",
     "nxeart",
     "plist360.arc",
@@ -43,6 +45,7 @@ $requiredRoot = @(
     "native_shaders\shaders.spv.pak",
     "native_shaders\pipelines.list"
 )
+$gameRoot = Join-Path $SdDir "Game_files"
 
 $problems = 0
 
@@ -59,29 +62,51 @@ foreach ($f in $requiredRoot) {
     }
 }
 
+if (-not (Test-Path -LiteralPath $gameRoot -PathType Container)) {
+    Write-Host "  MISS Game_files/ (the disc files live there)" -ForegroundColor Red
+    $problems++
+} else {
+    Write-Host "  OK   Game_files/"
+    foreach ($f in $requiredGame) {
+        $p = Join-Path $gameRoot $f
+        if (Test-Path -LiteralPath $p -PathType Leaf) {
+            Write-Host ("  OK   Game_files\{0} ({1:N1} MB)" -f $f, ((Get-Item -LiteralPath $p).Length / 1MB))
+        } else {
+            Write-Host "  MISS Game_files\$f" -ForegroundColor Red
+            $problems++
+        }
+    }
+}
+
 # Windows is case-insensitive, so the checks below would accept Pac/Sound/
 # Movies. The game asks for lowercase names; print and flag the exact case.
-$actualDirs = @(Get-ChildItem -LiteralPath $SdDir -Directory -ErrorAction SilentlyContinue |
-                Select-Object -ExpandProperty Name)
+$actualDirs = @(Get-ChildItem -LiteralPath $SdDir -ErrorAction SilentlyContinue |
+                Where-Object { $_.PSIsContainer } | Select-Object -ExpandProperty Name)
+if ($actualDirs -cnotcontains "Game_files") {
+    Write-Host ("  CASE expected 'Game_files', actual folders: {0}" -f ($actualDirs -join ", ")) -ForegroundColor Red
+    $problems++
+}
+$gameDirs = @(Get-ChildItem -LiteralPath $gameRoot -ErrorAction SilentlyContinue |
+              Where-Object { $_.PSIsContainer } | Select-Object -ExpandProperty Name)
 foreach ($expected in @("pac", "sound", "movies", "native_shaders")) {
-    if ($actualDirs -cnotcontains $expected) {
-        Write-Host ("  CASE expected '{0}', actual folders: {1}" -f $expected, ($actualDirs -join ", ")) -ForegroundColor Red
+    if ($gameDirs -cnotcontains $expected) {
+        Write-Host ("  CASE expected 'Game_files\{0}', actual folders: {1}" -f $expected, ($gameDirs -join ", ")) -ForegroundColor Red
         $problems++
     }
 }
 
 foreach ($dir in $expectedCounts.Keys) {
-    $p = Join-Path $SdDir $dir
+    $p = Join-Path $gameRoot $dir
     if (-not (Test-Path -LiteralPath $p -PathType Container)) {
-        Write-Host "  MISS $dir/ (folder)" -ForegroundColor Red
+        Write-Host "  MISS Game_files\$dir/ (folder)" -ForegroundColor Red
         $problems++
         continue
     }
     $count = (Get-ChildItem -LiteralPath $p -Recurse -File -ErrorAction SilentlyContinue).Count
     if ($count -ge $expectedCounts[$dir]) {
-        Write-Host ("  OK   {0}/ ({1} files)" -f $dir, $count)
+        Write-Host ("  OK   Game_files\{0}/ ({1} files)" -f $dir, $count)
     } else {
-        Write-Host ("  BAD  {0}/ ({1} files, expected at least {2})" -f $dir, $count, $expectedCounts[$dir]) -ForegroundColor Red
+        Write-Host ("  BAD  Game_files\{0}/ ({1} files, expected at least {2})" -f $dir, $count, $expectedCounts[$dir]) -ForegroundColor Red
         $problems++
     }
 }
@@ -129,5 +154,5 @@ if ($problems -eq 0) {
 }
 
 Write-Host "The copy is incomplete. Re-copy the CONTENTS of the staged folder into $SdDir." -ForegroundColor Yellow
-Write-Host "Do not copy the staged folder itself: pac, sound and movies must sit next to svr2011.nro."
+Write-Host "Do not copy the staged folder itself: Game_files must hold pac, sound and movies beside svr2011.nro."
 exit 1

@@ -11,6 +11,7 @@
 #include "weapon_mods.h"
 
 #include "crowd_fight.h"
+#include "game_root.h"
 
 #include <algorithm>
 #include <cstring>
@@ -43,7 +44,7 @@ constexpr size_t kRecordAt = 0x40, kRecord = 0x68;
 
 std::vector<svr2011::WeaponMod> g_mods;
 
-fs::path Game() { return rex::filesystem::GetExecutableFolder(); }
+fs::path Game() { return svr2011::GameRoot(); }
 
 std::vector<std::string> Lines(const fs::path& file) {
   std::vector<std::string> out;

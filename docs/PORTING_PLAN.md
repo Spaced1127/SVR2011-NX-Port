@@ -62,7 +62,7 @@ and does not crash on exit.
 - [ ] Add a `REXGLUE_PLATFORM_SWITCH` branch to `port/CMakeLists.txt`.
 - [ ] Wire the native Vulkan backend to the runtime's Vulkan device and the
       existing `.spv`/`.spvc` shader packs.
-- [ ] Add Switch paths (`sdmc:/switch/svr2011`), config defaults and
+- [ ] Add Switch paths (`sdmc:/switch/SVR2011`), config defaults and
       dock/undock handling.
 - [ ] Boot to the main menu with the user's game data.
 

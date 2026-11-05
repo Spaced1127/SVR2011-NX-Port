@@ -2,6 +2,7 @@
 #include "online_files.h"
 
 #include "../modmaker/svrfmt/mod_travel.h"
+#include "game_root.h"
 #include "mod_transfer.h"
 #include "no_mods.h"
 
@@ -293,7 +294,7 @@ uint32_t FolderCrc(const fs::path& dir) {
 std::string BuildModSet() {
   if (svr2011::NoMods()) return {};  // (Start Without Mods: no_mods.h)
   std::vector<std::string> lines;
-  const fs::path mods = rex::filesystem::GetExecutableFolder() / "Mods";
+  const fs::path mods = svr2011::GameRoot() / "Mods";
   std::error_code ec;
   for (const char* kind : {"Superstars", "Moves", "Arenas", "Backstage"}) {
     if (svr2011::BackstageModsOff() && std::string(kind) == "Backstage") continue;  // (no_mods.h: not loaded)
@@ -497,7 +498,7 @@ const std::vector<std::string>& ActiveMatchMods() {
     std::vector<std::string> out;
     if (NoMods()) return out;  // (Start Without Mods: none loaded - no_mods.h)
     std::error_code ec;
-    const fs::path dir = rex::filesystem::GetExecutableFolder() / "Mods";
+    const fs::path dir = svr2011::GameRoot() / "Mods";
     for (const char* kind : {"Superstars", "Moves", "Arenas", "Backstage", "Weapons", "Attires", "Media"}) {
       if (BackstageModsOff() && std::string(kind) == "Backstage") continue;  // (no_mods.h: not loaded)
       for (const auto& e : fs::directory_iterator(dir / kind, ec))

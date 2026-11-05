@@ -144,20 +144,18 @@ backend for it. plume's deko3d backend is MIT; uam is zlib/MIT/MPL-2.0.
   fallback now forces side 1 to 5 as it did for the Android/Steam Deck states;
   the celebration and results screen follow without the replay
   (`13322768…`).
-- **Replay recorder**: with `replays=true` the first recording callback freed
-  the clip buffer the attract demo left behind; one clip's destructor read
-  guest `0xDC`. `replays.cpp` now zeroes the 140 clip pointers once at the
-  match start (side 6, clock < 600) before the original free: the old clips
-  leak (small) and the match records into a clean buffer. Test with
-  [`performance-svr2011-replays.toml`](performance-svr2011-replays.toml); the
-  measured profile keeps replays off for the CPU cost.
-- **Arena crowd placement**: the Switch's `std::filesystem::copy_file` returns
-  `ENOSYS`; the arena overlay's fallback copies are skipped. `arena_crowd=off`
-  therefore leaves the stock arena files alone on the Switch while the
-  crowd-less copy is made. Use
-  [`performance-svr2011-crowd.toml`](performance-svr2011-crowd.toml) to render
-  the audience and measure the cost. A stream-copy fallback was tried but
-  blocked startup at a black screen and is reverted.
+- **Replay recorder (off in the supported profile)**: with `replays=true` the
+  first recording callback freed the clip buffer the attract demo left behind;
+  one clip's destructor read guest `0xDC`. `replays.cpp` zeroes the 140 clip
+  pointers at the match start for a test, but replays are not part of the
+  measured/supported profile: the recorder costs CPU and its highlighting is
+  unfinished. The supported profile keeps `replays=false` and still reaches the
+  celebration and results.
+- **Arena crowd (off in the measured profile)**: the Switch's
+  `std::filesystem::copy_file` returns `ENOSYS`, so the crowd-less arena
+  copies depend on the stock files. The measured profile keeps
+  `arena_crowd="off"` for the GPU cost; crowd rendering is not part of the
+  supported profile.
 - **Still open**: the app's Vulkan/ImGui overlays are off on the deko3d path;
   a persistent DKSH cache; a Clang cross-build of the generated code (the
   remaining codegen experiment).
@@ -180,20 +178,23 @@ REXGLUE_SWITCH_NVK_SDK=/path/to/nvk/extracted \
 bash tools/build_switch.sh --switch
 ```
 
-Copy `svr2011.nro` and `native_shaders/shaders.dk.pak` to the SD card. The
-deko3d path is selected by `native_backend = "deko3d"` (the default on the
-Switch); `native_backend = "auto"` keeps the emulator's Vulkan backend for
-comparison.
+Copy `svr2011.nro` to the SD root and the shader pack to
+`Game_files/native_shaders/shaders.dk.pak` (the layout is in
+[`../README.md`](../README.md)). The deko3d path is selected by
+`native_backend = "deko3d"` (the default on the Switch); `native_backend =
+"auto"` keeps the emulator's Vulkan backend for comparison.
 
 ## Working performance profile
 
-The measured 35 fps profile is
+The measured profile is
 [`performance-svr2011.toml`](performance-svr2011.toml): no FSR,
 `native_render_scale=0.5`, `native_scale_effects=true`,
-`native_record_thread=true`, 720p, 60 Hz. FSR 1 quality 4/5 was ~25 fps in the
-full-screen present build; the EASU/RCAS passes cost more than the smaller
-scene saves. Keep the `dbg_boot`/`dbg_match` lines for the straight-to-match
-test, or remove them for normal menu boot.
+`native_record_thread=true`, 720p, 60 Hz, `replays=false`. The `107` log
+measures 50.8–55.4 fps in-ring (draw 3.7 ms, span 19.4 ms). FSR 1 quality 4/5
+was ~25 fps in the full-screen present build; the EASU/RCAS passes cost more
+than the smaller scene saves. Add `dbg_boot="match"`, `dbg_match="..."` and
+`dbg_entrances=false` for a straight-to-match test; the normal profile boots
+through the menus.
 
 Screenshots of the running deko3d build live in
 [`screenshots/`](screenshots/) (documentation only).
@@ -209,13 +210,13 @@ for both passes.
 1. Instrumented NRO. The profile directory is a console path (`sdmc:`):
 
 ```bash
-SVR2011_PGO=generate SVR2011_PGO_DIR="sdmc:/switch/svr2011/pgo" \
+SVR2011_PGO=generate SVR2011_PGO_DIR="sdmc:/switch/SVR2011/pgo" \
   bash tools/build_switch.sh --switch
 ```
 
 Copy that NRO to the SD, boot it, play a representative match (menus,
 entrance, in-ring, attacks), and close the app cleanly so libgcov writes the
-`.gcda` files to `sdmc:/switch/svr2011/pgo`.
+`.gcda` files to `sdmc:/switch/SVR2011/pgo`.
 
 2. Copy the `pgo` folder from the SD to the host, then rebuild with the same
 build tree and the host path:

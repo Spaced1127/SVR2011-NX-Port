@@ -1,9 +1,12 @@
 // WWE SmackDown vs. Raw 2011 - ReXGlue recompiled PC port
 //
-// The program sits in the game folder beside the disc files (default.xex,
-// pac\, sound\, movies\ ...), so that folder is the game root. Saves, the
-// shader cache and logs go in UserData\ there too, which keeps an install
-// self-contained. Settings come from svr2011.toml, written by the launcher.
+// The SD layout is self-contained:
+//   SVR2011/Game_files/   default.xex, pac\, sound\, movies\, native_shaders\ ...
+//   SVR2011/svr2011.nro
+//   SVR2011/svr2011.toml
+// GameRoot() (game_root.h) is Game_files when that folder exists, else the
+// NRO's own folder (the PC layout). Saves, UserData and logs go beside the
+// NRO. Settings come from svr2011.toml, written by the launcher.
 
 #pragma once
 

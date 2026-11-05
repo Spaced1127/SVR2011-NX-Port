@@ -10,6 +10,7 @@
 //    (graphics_page.h, achievements_page.h) or closes the game.
 
 #include "frame_rate.h"
+#include "game_root.h"
 #include "menu_hooks.h"
 #include "thread_cpu.h"
 
@@ -163,7 +164,7 @@ void ReadMenuLabels() {
     d = g_menu_table;
   }
   if (d.empty()) {
-    const auto file = rex::filesystem::GetExecutableFolder() / "pac" / "menu" / "menu.pac";
+    const auto file = svr2011::GameRoot() / "pac" / "menu" / "menu.pac";
     std::ifstream in(file, std::ios::binary);
     if (!in) return;
     d.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());

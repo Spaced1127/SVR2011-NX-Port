@@ -45,6 +45,7 @@
 //    yes while it plays (else music players think it ended at once). Volume:
 //    the game's music / SFX / voice settings (*(0x82EC4C18)+36: floats).
 #include "media_mods.h"
+#include "game_root.h"
 #include "no_mods.h"
 
 #include <algorithm>
@@ -96,7 +97,7 @@ struct Voice {
 std::mutex g_voice_mutex;
 std::vector<Voice> g_voices;
 
-fs::path Game() { return rex::filesystem::GetExecutableFolder(); }
+fs::path Game() { return svr2011::GameRoot(); }
 
 std::vector<Pack> ReadPacks() {
   if (svr2011::NoMods()) return {};  // (Start Without Mods: no_mods.h)
