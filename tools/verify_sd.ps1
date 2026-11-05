@@ -43,6 +43,7 @@ $requiredGame = @(
     "plist360.arc",
     "plist360_4x3.arc",
     "native_shaders\shaders.spv.pak",
+    "native_shaders\shaders.dk.pak",
     "native_shaders\pipelines.list"
 )
 $gameRoot = Join-Path $SdDir "Game_files"
