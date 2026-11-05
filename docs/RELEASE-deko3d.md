@@ -85,6 +85,11 @@ In-ring, 60 Hz game logic:
   `A16E982777981679E5C242D552B42E4A68D714CEFE10CFB4D3412806C3F52ADB`;
   `shaders.dk.pak` 14,387,537 bytes, SHA-256
   `3A15F39B263BA45B23E3682C48252C8F1B6BE61EF330A158342F1EC5AE9D94E5`.
+- Replay-fix build (this commit: `frame_rate` drops the recorder callbacks
+  with `replays=false`; the arena copy fallback is reverted):
+  `svr2011.nro` 82,770,117 bytes, SHA-256
+  `23B815BB6EF4CF91FEF2DFADA39C90F570197245F74D2D27FFD7CAE65EF21052`;
+  the shader pack is unchanged.
 
 ## Screenshots
 
@@ -94,10 +99,12 @@ inputs or game data; the release guard allows images only under that folder.
 
 ## Known issues
 
-- Instant replays (`replays=true`) crash the guest after the entrance (a read
-  of guest `0xDC` right after the replay recorder starts). The measured profile
-  sets `replays=false`; the replay recorder state machine is a port issue, not
-  a deko3d rendering issue.
+- Instant replays / the replay recorder (`replays=true`) crash the guest at
+  the match start (a read of guest `0xDC` on the replay thread). The
+  `frame_rate` hook now drops the recorder's queued callbacks when
+  `replays=false`, and the match-end highlights are off; the measured profile
+  keeps it off. This is a port replay-recorder issue, not a deko3d rendering
+  issue.
 - The app's Vulkan/ImGui overlays (settings, FPS overlay, achievements) are
   not drawn on the deko3d path; the game's own UI is rendered by deko3d.
 - The folder save `Saves/SaveData.dat/SaveData.Dat` loads; creating a new flat

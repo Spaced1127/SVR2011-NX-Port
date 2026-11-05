@@ -111,9 +111,10 @@ backend for it. plume's deko3d backend is MIT; uam is zlib/MIT/MPL-2.0.
 - **Clean baseline**: tag `deko3d-perf-baseline` (`abe2a66`); the last
   measured 35 fps build was rebuilt from scratch (host codegen + generated
   game code + NRO) and the shader pack regenerated (926 converted, 0 skipped).
-- **Replay crash**: with `replays=true`, the game's replay recorder starts
-  after the entrance and reads guest `0xDC` (an unhandled guest access
-  violation). The measured profile keeps `replays=false`.
+- **Replay crash**: with `replays=true`, the recorder's queued callbacks read
+  guest `0xDC` at the match start; `replays=false` now drops both recorder
+  callback pairs in `frame_rate.cpp` (and the match-end highlights are off).
+  The measured profile keeps it off.
 - **Arena crowd placement**: the Switch's `std::filesystem::copy_file` returns
   `ENOSYS`; the arena overlay's fallback copies are skipped. `arena_crowd=off`
   therefore leaves the stock arena files alone on the Switch (the crowd may

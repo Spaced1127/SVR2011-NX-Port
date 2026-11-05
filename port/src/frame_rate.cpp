@@ -34,6 +34,8 @@
 
 #include <rex/cvar.h>
 
+REXCVAR_DECLARE(bool, replays);  // defined in replays.cpp
+
 REXCVAR_DEFINE_BOOL(svr2011_watchdog_dump, true, "Debug",
                     "Dump every guest thread when a pass is stuck (test aid: off keeps the "
                     "watchdog from spending minutes writing the dump to a busy SD card)");
@@ -1109,8 +1111,18 @@ static bool g_replay_step = true;  // (this frame's step: its two callbacks queu
 REX_EXTERN(__imp__sub_826E0F78);
 REX_HOOK_RAW(sub_826E0F78) {
   const uint32_t obj = ctx.r6.u32;
+  const uint32_t cb = ctx.r5.u32;
+  const bool replay_cb = cb == 0x8217AF30 || cb == 0x8217AF38 || cb == 0x827ACA10 || cb == 0x8217A718;
+  // Replays off: drop every recorder callback (both queued pairs). The
+  // playback object is not in the state the callbacks expect at the match
+  // start - a guest read of 0xDC on the replay thread - and the match-end
+  // highlights are off too (replays.cpp).
+  if (replay_cb && !REXCVAR_GET(replays) && obj && obj == Rd32(base + 0x82DEA30C) &&
+      std::this_thread::get_id() == g_logic_thread.load())
+    return;
   if ((ctx.r5.u32 == 0x8217AF38 || ctx.r5.u32 == 0x8217A718) && obj && obj == Rd32(base + 0x82DEA30C) &&
       std::this_thread::get_id() == g_logic_thread.load()) {
+    if (!REXCVAR_GET(replays)) return;  // (replays off: no recorder callbacks)
     if (g_extra_update) {
       static int skipped = 0;
       if (++skipped == 1 || skipped % 1000 == 0)
