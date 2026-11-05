@@ -60,9 +60,26 @@ class Deko3DBackend final : public Backend {
 
   void SetDevice(plume::RenderDevice* device) override {
     device_ = device;
+    copy_pending_ = false;
+    focused_ = true;
     queue_ = device_->createCommandQueue(plume::RenderCommandListType::DIRECT);
     if (!queue_) {
       REXLOG_ERROR("deko3d: could not create the presentation queue");
+      return;
+    }
+    // One command list and fence for the per-frame copy, reused. A list per
+    // frame allocates a 1 MB command block each time and its destructor calls
+    // dkQueueWaitIdle: that waits for the present too, so a screenshot or a
+    // paused display (which holds the window's buffers) froze the render thread
+    // silently. The copy fence signs before the present; waiting for it before
+    // the next frame's copy reuses the list safely even if the display is
+    // paused.
+    copy_list_ = queue_->createCommandList();
+    copy_fence_ = device_->createCommandFence();
+    if (!copy_list_ || !copy_fence_) {
+      REXLOG_ERROR("deko3d: could not create the present copy list");
+      copy_list_.reset();
+      copy_fence_.reset();
     }
   }
 
@@ -76,8 +93,10 @@ class Deko3DBackend final : public Backend {
         return;
       }
       // The swapchain is the NWindow's size (the display's); a frame of a
-      // different size is scaled into it below.
-      plume::RenderSwapChainDesc desc(window, kSwapChainFormat, 2);
+      // different size is scaled into it below. Three images: the screenshot
+      // service and the compositor can hold one each while the app still has
+      // one to acquire (two images deadlocked the render thread on capture).
+      plume::RenderSwapChainDesc desc(window, kSwapChainFormat, 3);
       swapchain_ = queue_->createSwapChain(desc);
       if (!swapchain_) {
         REXLOG_ERROR("deko3d: could not create the swapchain");
@@ -86,6 +105,7 @@ class Deko3DBackend final : public Backend {
       REXLOG_INFO("deko3d: swapchain {}x{}, frame {}x{}", swapchain_->getWidth(), swapchain_->getHeight(), width,
                   height);
     } else if (swapchain_->needsResize()) {
+      REXLOG_INFO("deko3d: the window changed size; resizing the swapchain");
       if (!swapchain_->resize()) {
         REXLOG_ERROR("deko3d: could not resize the swapchain");
         return;
@@ -96,24 +116,39 @@ class Deko3DBackend final : public Backend {
     // The renderer's frame submission signals this fence; the copy must not
     // read the image before it.
     if (fence) queue_->waitForCommandFence(fence);
+    // HOME, sleep and the screen capture can stop the display taking frames.
+    // Queueing another one then blocks in the window's buffer queue (and with
+    // it the game's logic thread): pause until the applet is in focus again.
+    const bool focused = appletGetFocusState() == AppletFocusState_InFocus;
+    if (focused != focused_) {
+      focused_ = focused;
+      REXLOG_INFO("deko3d: presenting {}", focused ? "resumed" : "paused (the applet has no focus)");
+    }
+    if (!focused) return;
+    // The previous frame's copy must be done before its command list is begun
+    // again. Its fence signs before the present, so a paused display does not
+    // hold this wait.
+    if (copy_pending_) {
+      queue_->waitForCommandFence(copy_fence_.get());
+      copy_pending_ = false;
+    }
     uint32_t index = 0;
     if (!swapchain_->acquireTexture(nullptr, &index)) return;
     plume::RenderTexture* dst = swapchain_->getTexture(index);
     if (!dst) return;
-    auto list = queue_->createCommandList();
-    auto copy_fence = device_->createCommandFence();
-    if (!list || !copy_fence) return;
-    list->begin();
+    if (!copy_list_ || !copy_fence_) return;
+    copy_list_->begin();
     if (swapchain_->getWidth() != width || swapchain_->getHeight() != height) {
       // The NWindow is a different size from the frame: the 2D engine scales
       // it (a plain copy would leave the rest of the swapchain undefined).
-      static_cast<plume::Deko3DCommandList*>(list.get())->blitTexture(dst, image.get());
+      static_cast<plume::Deko3DCommandList*>(copy_list_.get())->blitTexture(dst, image.get());
     } else {
-      list->copyTexture(dst, image.get());
+      copy_list_->copyTexture(dst, image.get());
     }
-    list->end();
-    queue_->executeCommandLists(list.get(), copy_fence.get());
-    queue_->waitForCommandFence(copy_fence.get());
+    copy_list_->end();
+    queue_->executeCommandLists(copy_list_.get(), copy_fence_.get());
+    copy_pending_ = true;
+    // The queue orders the copy before the present; no CPU wait for the copy.
     swapchain_->present(index, nullptr, 0);
   }
 
@@ -164,6 +199,10 @@ class Deko3DBackend final : public Backend {
   plume::RenderDevice* device_ = nullptr;
   std::unique_ptr<plume::RenderCommandQueue> queue_;
   std::unique_ptr<plume::RenderSwapChain> swapchain_;
+  std::unique_ptr<plume::RenderCommandList> copy_list_;
+  std::unique_ptr<plume::RenderCommandFence> copy_fence_;
+  bool copy_pending_ = false;
+  bool focused_ = true;
 };
 
 }  // namespace
