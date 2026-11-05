@@ -7,7 +7,8 @@ This is a native Nintendo Switch homebrew port of the Xbox 360 version of
 is statically recompiled to C++ with [ReXGlue](https://github.com/rexglue/rexglue-sdk)
 and compiled for the Switch with devkitA64/libnx. The native renderer on
 `main` draws through Vulkan on [Mesa NVK](https://github.com/danfromtico/mesa-switch);
-this `deko3d` branch replaces that backend with the Switch's own deko3d API.
+this `deko3d` branch (the repository default) replaces that backend with the
+Switch's own deko3d API.
 The deko3d work is tracked in [docs/DEKO3D.md](docs/DEKO3D.md), with the
 source-only release notes in [docs/RELEASE-deko3d.md](docs/RELEASE-deko3d.md).
 

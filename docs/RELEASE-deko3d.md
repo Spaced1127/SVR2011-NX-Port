@@ -6,9 +6,9 @@ build the NRO locally. Maintainer screenshots of the running port live in
 [`docs/screenshots/`](screenshots/) as documentation only; they are not game
 data used by the build.
 
-This is the `deko3d` branch: the native renderer draws and presents on the
-Switch's own GPU API instead of Vulkan/NVK. `main` keeps the working NVK
-build for comparison.
+This is the `deko3d` branch (the repository default): the native renderer draws
+and presents on the Switch's own GPU API instead of Vulkan/NVK. `main` keeps
+the working NVK build for comparison.
 
 ## Requirements
 
