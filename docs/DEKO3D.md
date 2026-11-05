@@ -115,6 +115,18 @@ backend for it. plume's deko3d backend is MIT; uam is zlib/MIT/MPL-2.0.
   guest `0xDC` at the match start; `replays=false` now drops both recorder
   callback pairs in `frame_rate.cpp` (and the match-end highlights are off).
   The measured profile keeps it off.
+- **Match-start crash (open)**: the recorder callbacks are gone (`svr2011_103`
+  has no `0xDC` guest read), but the game still closes at the first in-ring
+  frame. The end of that log holds the tail of
+  `00181780173CF87B.vs.s1`'s GLSL (a 51 KB wrestler vertex shader); that shader
+  compiles on the desktop and on aarch64 (qemu) uam with a 1 MB stack and
+  28–49 MB RSS, so the dump looks like a crash handler's stack trace, not a
+  compile failure. The diagnostic build (`0FD75327…`) skips the recorder
+  update itself (`sub_8217BC90`) when `replays=false`, logs every run-time
+  variant, writes the last large variant to `sdmc:/svr2011_last_shader.glsl`
+  and `.txt` before compiling it, and raises the memory-block log cap; the
+  next log's last variant and heap trend separate a shader-variant crash from
+  an out-of-memory one.
 - **Arena crowd placement**: the Switch's `std::filesystem::copy_file` returns
   `ENOSYS`; the arena overlay's fallback copies are skipped. `arena_crowd=off`
   therefore leaves the stock arena files alone on the Switch (the crowd may

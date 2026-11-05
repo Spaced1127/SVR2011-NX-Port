@@ -85,11 +85,18 @@ In-ring, 60 Hz game logic:
   `A16E982777981679E5C242D552B42E4A68D714CEFE10CFB4D3412806C3F52ADB`;
   `shaders.dk.pak` 14,387,537 bytes, SHA-256
   `3A15F39B263BA45B23E3682C48252C8F1B6BE61EF330A158342F1EC5AE9D94E5`.
-- Replay-fix build (this commit: `frame_rate` drops the recorder callbacks
+- Replay-fix build (commit `1917a44`: `frame_rate` drops the recorder callbacks
   with `replays=false`; the arena copy fallback is reverted):
   `svr2011.nro` 82,770,117 bytes, SHA-256
   `23B815BB6EF4CF91FEF2DFADA39C90F570197245F74D2D27FFD7CAE65EF21052`;
   the shader pack is unchanged.
+- Match-start diagnostic build (current): `svr2011.nro` 82,770,117 bytes,
+  SHA-256 `0FD753271B7256A6E02FE42B5E8C7393B630F0524273A1F92BB1FF8B14387EB4`;
+  the shader pack is unchanged. It skips the recorder update
+  (`sub_8217BC90`) with `replays=false`, logs every run-time shader variant,
+  writes the last large variant to `sdmc:/svr2011_last_shader.glsl` and
+  `sdmc:/svr2011_last_shader.txt` before compiling it, gives the uam thread
+  16 MB of stack, and logs up to 96 deko3d memory blocks.
 
 ## Screenshots
 

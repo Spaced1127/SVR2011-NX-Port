@@ -869,10 +869,11 @@ namespace plume {
         description.vendor = RenderDeviceVendor::NVIDIA;
         description.driverVersion = 0x000500;
 
-        // The uam worker: one thread (uam is not reentrant), 8 MB of stack (Mesa's parser and nv50_ir recurse deeply).
+        // The uam worker: one thread (uam is not reentrant), 16 MB of stack (Mesa's parser and nv50_ir recurse deeply;
+        // the 51 KB wrestler vertex shaders compiled at the match start are the deepest the game has).
         pthread_attr_t attr;
         pthread_attr_init(&attr);
-        pthread_attr_setstacksize(&attr, 8u << 20);
+        pthread_attr_setstacksize(&attr, 16u << 20);
         pthread_t thread;
         if (pthread_create(&thread, &attr, compileThreadEntry, this) != 0) {
             logf("the shader compile thread did not start");
@@ -930,7 +931,8 @@ namespace plume {
         const uint64_t before = total.fetch_add(m.size);
         // banjo-nx (2026-10-19, render-thread proposal 18): 24 lines, not 96 (each walks the heap and writes the SD card,
         // on the thread making the block: the render thread for the upload ring's chunks).
-        if ((size >= (8u << 20) || (before >> 26) != ((before + m.size) >> 26)) && logged.fetch_add(1) < 24) {
+        // (2026-11-05: 96 while the match-start crash is tracked; the heap trend across the load is the evidence.)
+        if ((size >= (8u << 20) || (before >> 26) != ((before + m.size) >> 26)) && logged.fetch_add(1) < 96) {
             uint64_t heapFree = 0, processFree = 0;
             memoryFigures(heapFree, processFree);
             logf("memory block: %s, %u KiB (deko3d blocks %" PRIu64 " MB in all; heap %" PRIu64 " MB free, process %" PRIu64 " MB unused)",
@@ -1477,12 +1479,53 @@ namespace plume {
                 have = true;
             }
             if (!have) {
+                // The match start compiles the 51 KB wrestler vertex shaders for the first time. When one of those
+                // compiles takes the whole process down, the log stops mid-write; keep the last attempted variant's
+                // source on the SD so it can be reproduced with the desktop uam.
+                static std::atomic<uint32_t> attempted{0};
+                const uint32_t n = attempted.fetch_add(1) + 1;
+                logf("uam: variant %u %s (stage %u, %zu bytes, key %016" PRIx64 ")%s%s", n,
+                     shader->name.empty() ? "a shader" : shader->name.c_str(), uint32_t(shader->stage), source.size(),
+                     key, defines.empty() ? "" : ", defines ", defines.c_str());
+                if (source.size() >= 8192) {
+                    FILE *f = fopen("sdmc:/svr2011_last_shader.glsl", "wb");
+                    if (!f)
+                        f = fopen("svr2011_last_shader.glsl", "wb");
+                    if (f) {
+                        fwrite(source.data(), 1, source.size(), f);
+                        fclose(f);
+                    }
+                    FILE *m = fopen("sdmc:/svr2011_last_shader.txt", "wb");
+                    if (!m)
+                        m = fopen("svr2011_last_shader.txt", "wb");
+                    if (m) {
+                        fprintf(m, "%s\nstage %u\nsize %zu\nkey %016" PRIx64 "\n",
+                                shader->name.empty() ? "a shader" : shader->name.c_str(), uint32_t(shader->stage),
+                                source.size(), key);
+                        if (!defines.empty())
+                            fprintf(m, "%s", defines.c_str());
+                        fclose(m);
+                    }
+                }
                 std::string log;
                 if (!compile(shader->stage, source, dksh, log)) {
                     g_deko3dStats.shaderCompileFailures++;
                     static std::atomic<uint32_t> logged{0};
-                    if (logged.fetch_add(1) < 32)
-                        logf("uam failed for %s (variant %016" PRIx64 "): %s", shader->name.empty() ? "a shader" : shader->name.c_str(), key, log.c_str());
+                    if (logged.fetch_add(1) < 32) {
+                        // (the uam log can hold the whole shader source; keep
+                        // the error line, not the source, so the app log stays
+                        // readable)
+                        std::string trimmed = log;
+                        const size_t err = log.find("error:");
+                        if (err != std::string::npos) {
+                            const size_t from = err > 256 ? err - 256 : 0;
+                            trimmed = log.substr(from, 2048);
+                        } else if (log.size() > 4096) {
+                            trimmed = log.substr(0, 2048) + "\n...\n" + log.substr(log.size() - 2048);
+                        }
+                        logf("uam failed for %s (variant %016" PRIx64 "): %s",
+                             shader->name.empty() ? "a shader" : shader->name.c_str(), key, trimmed.c_str());
+                    }
                 }
                 else {
                     have = true;

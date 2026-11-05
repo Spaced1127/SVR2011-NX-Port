@@ -1073,6 +1073,16 @@ void StartDeveloperAids(uint8_t* base) {
 }  // namespace
 
 
+// The replay recorder's per-update entry: with replays off, skip it entirely.
+// The queued callbacks' object is not in the state they expect, and dropping
+// only the queue left the recorder's jobs in the guest job queue (the world
+// update stuck in pass 20, jobs +44 827ACA10).
+REX_EXTERN(__imp__sub_8217BC90);
+REX_HOOK_RAW(sub_8217BC90) {
+  if (!REXCVAR_GET(replays)) return;
+  __imp__sub_8217BC90(ctx, base);
+}
+
 // A frame's callbacks for another thread (sub_826E0F78 queues them,
 // sub_826E1260 runs them once a frame): with two updates in a frame each one
 // is queued twice, and the second update may let go of what the first one's
