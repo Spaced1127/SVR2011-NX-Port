@@ -313,6 +313,9 @@ void DumpGuestThreads(uint8_t* base, bool only_interesting = false) {
   REXLOG_WARN("frame rate: heap locks held:{}", held.empty() ? std::string(" none") : held);
 }
 std::atomic<int64_t> g_dbg_since{0};
+// The last frame the native renderer handed over (LatencyOnSwap): a load that
+// hangs outside the world update still stops this clock.
+std::atomic<int64_t> g_last_swap_at{0};
 // When the current update/draw pass started. g_dbg_since is reset by every
 // virtual call, so a pass that keeps working (the save serialization) never
 // looks "stuck"; this one measures the whole pass.
@@ -784,6 +787,24 @@ REX_HOOK_RAW(sub_8269C728) {
         if (stuck > std::chrono::seconds(300)) {
           REXLOG_ERROR("frame rate: no world update for 300 s; exiting to the Home menu");
           std::_Exit(0);
+        }
+        // A load/transition can hang outside the world update: no frame is
+        // handed to the presenter, but the pass clock never moves either.
+        // Dump the guest PCs after 10 s so the next report names the function.
+        static int64_t dumped_swap = 0;
+        static int swap_dumps = 0;
+        const int64_t sw = g_last_swap_at.load();
+        if (sw != 0 && sw != dumped_swap && swap_dumps < 4 &&
+            Clock::now() - Clock::time_point(Clock::duration(sw)) > std::chrono::seconds(10)) {
+          dumped_swap = sw;
+          ++swap_dumps;
+          REXLOG_WARN("frame rate: no frame for 10 s - guest thread dump");
+          std::thread([] {
+            if (uint8_t* b = g_base) {
+              DumpGuestThreads(b, false);
+              DumpJobEvents();
+            }
+          }).detach();
         }
       }
     }).detach();
@@ -1290,7 +1311,10 @@ std::atomic<int64_t> g_lat_publish_at{0};
 }  // namespace
 
 namespace svr2011 {
-void LatencyOnSwap() { ++g_lat_swapped; }
+void LatencyOnSwap() {
+  ++g_lat_swapped;
+  g_last_swap_at = Clock::now().time_since_epoch().count();
+}
 void LatencyOnPublish() {
   static const bool on = std::getenv("SVR2011_TEST_LATENCY") != nullptr;
   if (!on) return;

@@ -1452,6 +1452,8 @@ REX_HOOK_RAW(sub_8277E928) {
   const uint32_t card = ctx.r3.u32;
   const uint8_t* s = base + card + 196;
   const bool city_card = (uint32_t(s[0]) << 24 | uint32_t(s[1]) << 16 | uint32_t(s[2]) << 8 | s[3]) == 4;
+  static int begun = 0;
+  if (begun++ < 4) REXLOG_INFO("[svr2011] arena mods: title card begin");
   __imp__sub_8277E928(ctx, base);
   const auto* c = static_cast<const CustomArena*>(g_redirected_custom);
   if (!city_card) return;
