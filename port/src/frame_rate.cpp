@@ -774,23 +774,9 @@ REX_HOOK_RAW(sub_8269C728) {
 #endif
       for (;;) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
-        const int64_t s = g_dbg_since.load();
-        if (s == 0) continue;
-        const auto stuck = Clock::now() - Clock::time_point(Clock::duration(s));
-        if (g_dbg_pass != 0 && stuck > std::chrono::seconds(60)) {
-          REXLOG_ERROR("frame rate: world update stuck for 60 s; exiting to the Home menu");
-          std::_Exit(0);
-        }
-        // Global backstop: no world update for five minutes. The per-pass check
-        // above only runs while a pass is open; a load that never reaches the
-        // next pass would otherwise stay at 0 fps forever.
-        if (stuck > std::chrono::seconds(300)) {
-          REXLOG_ERROR("frame rate: no world update for 300 s; exiting to the Home menu");
-          std::_Exit(0);
-        }
         // A load/transition can hang outside the world update: no frame is
-        // handed to the presenter, but the pass clock never moves either.
-        // Dump the guest PCs after 10 s so the next report names the function.
+        // handed to the presenter. Check this before the world-update clock
+        // (which can be zero during a transition).
         static int64_t dumped_swap = 0;
         static int swap_dumps = 0;
         const int64_t sw = g_last_swap_at.load();
@@ -805,6 +791,36 @@ REX_HOOK_RAW(sub_8269C728) {
               DumpJobEvents();
             }
           }).detach();
+        }
+        const int64_t s = g_dbg_since.load();
+        if (s == 0) continue;
+        const auto stuck = Clock::now() - Clock::time_point(Clock::duration(s));
+        // The world update is the game's own clock: if it has not moved for
+        // 10 s, the guest is stuck even while the renderer keeps presenting the
+        // last frame. (The per-pass check below needs a pass to be open.)
+        static int64_t dumped_world = 0;
+        static int world_dumps = 0;
+        if (s != dumped_world && world_dumps < 4 && stuck > std::chrono::seconds(10)) {
+          dumped_world = s;
+          ++world_dumps;
+          REXLOG_WARN("frame rate: no world update for 10 s - guest thread dump");
+          std::thread([] {
+            if (uint8_t* b = g_base) {
+              DumpGuestThreads(b, false);
+              DumpJobEvents();
+            }
+          }).detach();
+        }
+        if (g_dbg_pass != 0 && stuck > std::chrono::seconds(60)) {
+          REXLOG_ERROR("frame rate: world update stuck for 60 s; exiting to the Home menu");
+          std::_Exit(0);
+        }
+        // Global backstop: no world update for five minutes. The per-pass check
+        // above only runs while a pass is open; a load that never reaches the
+        // next pass would otherwise stay at 0 fps forever.
+        if (stuck > std::chrono::seconds(300)) {
+          REXLOG_ERROR("frame rate: no world update for 300 s; exiting to the Home menu");
+          std::_Exit(0);
         }
       }
     }).detach();
