@@ -68,7 +68,10 @@ them.
 ## Known limitations
 
 - The folder save `Saves/SaveData.dat/SaveData.Dat` loads and overwriting
-  works; creating a new flat-file save is slow/unreliable on the console.
+  works. Loading a **flat** `Saves/SaveData.dat` can hang on the console;
+  convert it to the folder form (move the file into a `SaveData.dat` folder as
+  `SaveData.Dat`, delete `Saves/.mount`). Creating a new flat-file save is
+  slow/unreliable.
 - `dlc_fan_axxess=true` hangs in the fake DLC loader; keep it `false`.
 - The stock console was CPU-limited around 33 fps in the earlier build; 60 fps
   is not reachable at stock clocks.

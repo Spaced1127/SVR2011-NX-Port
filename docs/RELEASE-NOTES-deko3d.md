@@ -383,6 +383,9 @@ input backend built (`input_backend = "switch"`).
   profile.
 - **Creating a new flat-file save is slow/unreliable** on the console. The
   folder save `Saves/SaveData.dat/SaveData.Dat` loads, and overwriting works.
+  If loading a save hangs, the save is in the flat `Saves/SaveData.dat` file
+  form: convert it to the folder form (see Troubleshooting) or restore a folder
+  save.
 - **DLC:** the port's fake Fan Axxess package hangs the DLC loader; keep
   `dlc_fan_axxess = false` and `unlock_everything = false`.
 - **Vulkan/ImGui overlays** (settings, FPS overlay, achievements) are not drawn
@@ -403,6 +406,7 @@ input backend built (`input_backend = "switch"`).
 | “game files missing” | `Game_files/` lacks `default.xex`, `pac/`, `sound/`, `movies/`, `plist360*.arc` or `nxeart`; re-copy them. |
 | No controller | `input_backend` must be `switch`; the libnx pad driver is the only one built. |
 | Out of memory | You are in album applet mode; use a title override/forwarder. |
+| Hangs while loading a save | The save is the flat `Saves/SaveData.dat` file. Use the folder form: create a folder `Saves/SaveData.dat`, move the flat file into it as `SaveData.Dat`, and delete `Saves/.mount`. The folder save loads. |
 | “game folder” line points at the NRO folder | `Game_files/` is not beside the NRO or is named differently. |
 
 Logs and crash reports are written beside the NRO, under `logs/`

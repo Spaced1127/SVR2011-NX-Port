@@ -136,6 +136,7 @@ or shader packs to a public issue. The log and settings are enough.
 | "game files missing" | `Game_files/` lacks `default.xex`, `pac/`, `sound/`, `movies/`, `plist360*.arc` or `nxeart`; reinstall with the PC launcher. |
 | No controller | `input_backend` must be `switch`; the libnx pad driver is the only one built. |
 | Out of memory / thread creation failure | Use a forwarder or title override; close other software. |
+| Hangs while loading a save | The save is the flat `Saves/SaveData.dat` file. Convert it to the folder form (`Saves/SaveData.dat/SaveData.Dat`) and delete `Saves/.mount`; the folder save loads. |
 | Crash after a few seconds | Copy `logs/rex/rex_crash.log` and the Atmosphère report. |
 
 ## After the first boot
