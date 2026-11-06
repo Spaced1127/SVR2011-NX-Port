@@ -4,10 +4,10 @@
 
 | | |
 |---|---|
-| Build | `deko3d` branch, commit `3be9ceb` (tag `deko3d-gamefiles`) |
+| Build | `deko3d` branch, save-fix build (2026-11-06) |
 | File | `svr2011.nro` |
 | Size | 82,774,213 bytes |
-| SHA-256 | `9F85C293E0A0767884BAEF7F9834EF79102A071D84421869AA3BDE32D2F83526` |
+| SHA-256 | `40BA4887C52DE7B02A43BC84817E039C9E1713EB29060C02F0A59FCC927D8D15` |
 | Game version | WWE SmackDown vs. Raw 2011, Xbox 360 (2.1.8, US/EU multi-language) |
 | Requires | Your own copy of the game; Switch 1 with Atmosphère/homebrew |
 
@@ -31,7 +31,8 @@ What works in this build:
 - boots to the menu; 60 fps menus;
 - a 1v1 match from the entrance to the pinfall, celebration and results;
 - audio, controller input and the game's own UI;
-- loading a folder save and overwriting it;
+- loading a folder save and overwriting it; the flat-save mount now copies the
+  save with stdio on the SD (no hard links, `copy_file` is `ENOSYS` there);
 - the system Capture-button screenshots (the earlier in-ring freeze is fixed);
 - **~51 fps in-ring** on the overclocked console (50.8–55.4 fps over five-second
   windows in the reference log; 60 Hz game logic, draw 3.7 ms, span 19.4 ms).
@@ -381,11 +382,11 @@ input backend built (`input_backend = "switch"`).
 - **The optional arena crowd is off** in the measured profile
   (`arena_crowd = "off"`). It costs GPU time and is not part of the supported
   profile.
-- **Creating a new flat-file save is slow/unreliable** on the console. The
-  folder save `Saves/SaveData.dat/SaveData.Dat` loads, and overwriting works.
-  If loading a save hangs, the save is in the flat `Saves/SaveData.dat` file
-  form: convert it to the folder form (see Troubleshooting) or restore a folder
-  save.
+- **Saves**: the flat `Saves/SaveData.dat` mount now copies the save with
+  stdio on the SD (the Switch's filesystem has no hard links and
+  `std::filesystem::copy_file` is `ENOSYS` there). The folder save
+  `Saves/SaveData.dat/SaveData.Dat` remains the safest form; if a save from an
+  older build still fails, convert it to the folder form (see Troubleshooting).
 - **DLC:** the port's fake Fan Axxess package hangs the DLC loader; keep
   `dlc_fan_axxess = false` and `unlock_everything = false`.
 - **Vulkan/ImGui overlays** (settings, FPS overlay, achievements) are not drawn

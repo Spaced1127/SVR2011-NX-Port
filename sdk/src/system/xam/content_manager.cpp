@@ -822,6 +822,44 @@ std::string ReadSmallText(const std::filesystem::path& p) {
   }
   return text;
 }
+
+// [svr2011] std::filesystem::copy_file is ENOSYS on the Switch's SD filesystem,
+// and exFAT has no hard links: the flat save's mount stayed empty and the game
+// saw a 0-byte save. Copy through stdio instead (host paths, binary).
+bool CopyFileBytes(const std::filesystem::path& from, const std::filesystem::path& to,
+                   std::error_code& ec) {
+  FILE* in = rex::filesystem::OpenFile(from, "rb");
+  if (!in) {
+    ec = std::make_error_code(std::errc::no_such_file_or_directory);
+    return false;
+  }
+  FILE* out = rex::filesystem::OpenFile(to, "wb");
+  if (!out) {
+    fclose(in);
+    ec = std::make_error_code(std::errc::permission_denied);
+    return false;
+  }
+  char buffer[64 * 1024];
+  bool ok = true;
+  size_t read = 0;
+  while ((read = fread(buffer, 1, sizeof(buffer), in)) != 0) {
+    if (fwrite(buffer, 1, read, out) != read) {
+      ok = false;
+      break;
+    }
+  }
+  if (ferror(in)) {
+    ok = false;
+  }
+  if (fclose(out) != 0) {
+    ok = false;
+  }
+  fclose(in);
+  if (!ok) {
+    ec = std::make_error_code(std::errc::io_error);
+  }
+  return ok;
+}
 }  // namespace
 
 void ContentManager::SetFlatSavesRoot(const std::filesystem::path& root) {
@@ -864,8 +902,15 @@ void ContentManager::PrepareFlatMount(const std::string& name) {
   const auto link = mount / rex::to_path(inner);
   std::filesystem::create_hard_link(file, link, ec);
   if (ec) {
-    // No hard links on this drive: work on a copy, moved back on close.
-    std::filesystem::copy_file(file, link, std::filesystem::copy_options::overwrite_existing, ec);
+    // No hard links on this drive (the Switch's SD is exFAT): work on a copy,
+    // moved back on close. std::filesystem::copy_file is ENOSYS there, so use
+    // stdio; without this the mount was empty and the game read a 0-byte save.
+    ec.clear();
+    CopyFileBytes(file, link, ec);
+    if (ec) {
+      REXSYS_WARN("Flat saves: could not mount {} ({}); the game will see an empty save", name,
+                  ec.message());
+    }
   }
 }
 
@@ -905,8 +950,10 @@ void ContentManager::CommitFlatMount(const std::string& name) {
       // A new file (or a copy): it becomes the save.
       std::filesystem::rename(inner, file, ec);
       if (ec) {
-        std::filesystem::copy_file(inner, file, std::filesystem::copy_options::overwrite_existing,
-                                   ec);
+        // A rename over an existing file can fail on the SD's filesystem;
+        // copy_file is ENOSYS there, so use stdio.
+        ec.clear();
+        CopyFileBytes(inner, file, ec);
         if (ec) {
           REXSYS_WARN("Flat saves: could not store {} ({})", name, ec.message());
           return;  // kept for the next start

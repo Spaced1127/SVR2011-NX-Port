@@ -90,8 +90,8 @@ In-ring, 60 Hz game logic:
   926 shaders converted, 0 skipped, 1,511 files.
 - Working settings: [`performance-svr2011.toml`](performance-svr2011.toml).
 - Local build fingerprint (varies with your generated code; current
-  `Game_files` layout build): `svr2011.nro` 82,774,213 bytes, SHA-256
-  `9F85C293E0A0767884BAEF7F9834EF79102A071D84421869AA3BDE32D2F83526`;
+  `Game_files` layout + save-fix build): `svr2011.nro` 82,774,213 bytes, SHA-256
+  `40BA4887C52DE7B02A43BC84817E039C9E1713EB29060C02F0A59FCC927D8D15`;
   `shaders.dk.pak` 14,387,537 bytes, SHA-256
   `3A15F39B263BA45B23E3682C48252C8F1B6BE61EF330A158342F1EC5AE9D94E5`.
 - Replay-fix build (commit `1917a44`: `frame_rate` drops the recorder callbacks
@@ -121,11 +121,14 @@ In-ring, 60 Hz game logic:
   (`+1504 1`). The 8 s fallback, which already forced the Android/Steam Deck
   states 4/6 done, now forces side 1 too: the celebration and results screen
   follow without the replay.
-- Current build (Game_files layout): `svr2011.nro` 82,774,213 bytes, SHA-256
-  `9F85C293E0A0767884BAEF7F9834EF79102A071D84421869AA3BDE32D2F83526`;
+- Current build (Game_files layout + save fix): `svr2011.nro` 82,774,213
+  bytes, SHA-256 `40BA4887C52DE7B02A43BC84817E039C9E1713EB29060C02F0A59FCC927D8D15`;
   the shader pack is unchanged. The NRO finds `Game_files/` beside itself
   (falling back to the disc files beside the program when that folder is not
   there). The SD folder is `Game_files/`, `svr2011.nro` and `svr2011.toml`.
+  The flat-save mount now copies with stdio: the Switch SD has no hard links
+  and `std::filesystem::copy_file` is `ENOSYS`, which left the game with a
+  0-byte save and corrupted the next write.
 - The working checkpoint and the next steps are in
   [`STATE.md`](STATE.md); tag `deko3d-match-working` is the known-good
   match build (`b805d26`).

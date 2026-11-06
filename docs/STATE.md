@@ -13,8 +13,8 @@ profile in [`performance-svr2011.toml`](performance-svr2011.toml).
 - Branch `deko3d`.
 - Known-good match checkpoint: tag **`deko3d-match-working`** (`b805d26`),
   NRO `13322768BB9EA32EA9D76E2AE11F270D44FD63F8921F1901F24AC607FC1F35B5`.
-- Current build (Game_files layout): `svr2011.nro` 82,774,213 bytes, SHA-256
-  `9F85C293E0A0767884BAEF7F9834EF79102A071D84421869AA3BDE32D2F83526`.
+- Current build (Game_files layout + save fix): `svr2011.nro` 82,774,213 bytes,
+  SHA-256 `40BA4887C52DE7B02A43BC84817E039C9E1713EB29060C02F0A59FCC927D8D15`.
 
 ## SD layout
 
@@ -44,6 +44,7 @@ layout.
 | Capture screenshot froze the console | one reusable present copy list/fence, 3 swapchain images, presents pause out of focus | `a299920` |
 | Match stopped at the pinfall | the match end's 8 s fallback forces update side `1` done too | `b805d26` |
 | Game data beside the NRO only | `Game_files/` detection and every game-data path moved to `GameRoot()` | current build |
+| Flat saves corrupted (read 0 B, next write lost) | `ContentManager` copies the flat save with stdio when hard links/`copy_file` are unavailable on the SD | current build |
 
 ## Supported profile
 
