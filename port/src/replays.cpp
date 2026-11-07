@@ -83,9 +83,9 @@ namespace svr2011 {
 
 bool ReplayClipsClearNow(uint8_t* base, const char* why) {
   const uint32_t recorder = Rd32(base + 0x82DEA30C);
-  if (!recorder) return false;
+  if (recorder < 0x10000 || recorder >= 0xE0000000u) return false;
   const uint32_t part = Rd32(base + recorder + 156);
-  if (!part) return false;
+  if (part < 0x10000 || part >= 0xE0000000u) return false;
   const uint32_t idx = Rd32(base + part + 1496);
   if (idx > 3) return false;
   const uint64_t buffer = uint64_t(part) + uint64_t(idx) * 748;
@@ -101,6 +101,11 @@ bool ReplayClipsClearNow(uint8_t* base, const char* why) {
 }
 
 void ReplayClipsClearIfNeeded(uint8_t* base) {
+  static const bool told = [] {
+    REXLOG_INFO("[svr2011] replay: clip guard active (replays {})", REXCVAR_GET(replays));
+    return true;
+  }();
+  (void)told;
   if (REXCVAR_GET(replays)) return;  // (the recorder's own callback clears it)
   static uint32_t last_clock = 0;
   static bool cleared = false;
