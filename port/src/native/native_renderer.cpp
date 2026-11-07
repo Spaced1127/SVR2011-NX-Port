@@ -3265,6 +3265,13 @@ RenderBufferReference SharedConstants(Renderer* r, bool alpha_test, const Shader
         }
       }
       const uint32_t srv = textures::Texture(ctx, fetch, dimension);
+      if (srv == UINT32_MAX) {
+        static int unbound = 0;
+        if (unbound++ < 8)
+          REXLOG_WARN("native renderer: unbound texture: shader {:016X}.{} slot {} dimension {} fetch {:08X} {:08X} {:08X} {:08X} {:08X} {:08X}",
+                      s->hash, s->pixel ? "ps" : "vs", slot, dimension, fetch[0], fetch[1], fetch[2], fetch[3], fetch[4],
+                      fetch[5]);
+      }
       if (slots) {
         if (dimension > 2 || slot >= kSlotCount[dimension] || srv == UINT32_MAX) continue;
         const uint32_t index = r->texture_base[dimension] + srv;
