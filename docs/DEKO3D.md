@@ -3,6 +3,9 @@
 This branch is the deko3d performance port. `main` keeps the working NVK/Vulkan
 build; this branch is where the Switch-native renderer is built.
 
+For a standalone, reusable write-up for another Xbox 360 -> Switch port, see
+[`DEKO3D-PORTING-GUIDE.md`](DEKO3D-PORTING-GUIDE.md).
+
 ## Why
 
 The NVK build boots and plays, but the in-ring scene is draw-bound:
