@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <cstring>
 
 #include <fmt/format.h>
@@ -464,7 +465,16 @@ X_STATUS XThread::Create() {
   RetainHandle();
 
   rex::thread::Thread::CreationParameters params;
+#if REX_PLATFORM_SWITCH
+  // Every guest thread gets its own host stack. At 16 MiB, the ~60 threads a
+  // match creates cost about 1 GB of the console's 3.2 GB process budget; the
+  // titantron's extra thread then failed with STATUS_NO_MEMORY (C0000017) and
+  // the entrance stopped (121 log). 4 MiB is still 64x the guest's usual
+  // 64 KiB stack and leaves room for the textures/models the scene loads.
+  params.stack_size = 4_MiB;
+#else
   params.stack_size = 16_MiB;  // Allocate a big host stack.
+#endif
   params.create_suspended = true;
   thread_ = rex::thread::Thread::Create(params, [this]() {
     rex::initialize_seh_thread();
@@ -498,7 +508,11 @@ X_STATUS XThread::Create() {
 
   if (!thread_) {
     // TODO(benvanik): translate error?
-    REXSYS_ERROR("CreateThread failed");
+    size_t guest_threads = 0;
+    if (auto* ks = kernel_state())
+      for (auto& t : ks->object_table()->GetObjectsByType<XThread>()) guest_threads += t ? 1 : 0;
+    REXSYS_ERROR("CreateThread failed (host errno {}, guest threads {}, stack {} MB)", errno, guest_threads,
+                 params.stack_size >> 20);
     return X_STATUS_NO_MEMORY;
   }
 

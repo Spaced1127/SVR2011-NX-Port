@@ -690,7 +690,7 @@ void Svr2011App::OnPostLoadXexImage() {
 #define SVR2011_BUILD_COMMIT "unknown"
 #endif
     REXLOG_INFO("==== SvR 2011 PC port {} (build {}) ====", SVR2011_PORT_VERSION, SVR2011_BUILD_COMMIT);
-    REXLOG_INFO("[svr2011] build marker: read-retry 2026-11-07");
+    REXLOG_INFO("[svr2011] build marker: stack-4m 2026-11-07");
     REXLOG_INFO("game folder: {}", svr2011::GameRoot().string());
 #if defined(_WIN32)
     // (src/utf8.manifest: Windows before 10 version 1903 ignores the UTF-8
