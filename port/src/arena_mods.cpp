@@ -1812,7 +1812,11 @@ void UseBackstageRow(int i) {
   RedirectArena(78, i < 0 ? "" : g_backstage_rows[size_t(i)].file);
 }
 
-void SetMatchLoading(bool loading) { g_match_loading = loading; }
+void SetMatchLoading(bool loading) {
+  if (g_match_loading.exchange(loading) != loading)
+    REXLOG_INFO("[svr2011] match load: {}", loading ? "starts - one world update a frame" : "the people are placed");
+}
+bool MatchLoading() { return g_match_loading.load(); }
 void SetSuperstarLoading(const std::string& file) { StarLoading(file); }
 
 std::string ArenaModInUse(int* tile) {

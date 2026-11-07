@@ -45,6 +45,10 @@ void SetArenaDefault(int arena, const std::string& relative_file);
 // A match is loading (set-up to its people placed): a custom arena's loading
 // pictures are swapped only then.
 void SetMatchLoading(bool loading);
+// That load is still in progress (frame_rate.cpp: one world update a frame
+// while it is - the game's load jobs are made for one update a frame, and two
+// in a slow frame ran a queued load callback twice: the RTWM ring load hung).
+bool MatchLoading();
 // Online (online_mods.cpp): the custom arena this game's next match plays
 // (the arena select's pick: its folder in Mods/Arenas and the tile it plays
 // on; "" when a stock arena), and another game's pick played here too (on

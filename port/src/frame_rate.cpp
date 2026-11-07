@@ -611,7 +611,13 @@ REX_HOOK_RAW(sub_8269C728) {
   g_job_frame.fetch_add(1);
   JobEv('F', uint32_t(g_world_ticks));
   // (free camera F8: the match held - no update passes, the frame drawn as it was; free_cam.h)
-  const int passes = svr2011::FreeCamPaused() && !g_lockstep && svr2011::InMatch() ? 0 : g_world_ticks;
+  // A match load's jobs are made for one world update a frame (the game's 60
+  // Hz): with two in a slow frame a queued load callback ran twice and the
+  // RTWM ring load hung (guest 0xDC before, a deadlock after that was
+  // guarded). The world's speed doesn't matter while it loads.
+  const int passes = svr2011::MatchLoading()
+                         ? 1
+                         : (svr2011::FreeCamPaused() && !g_lockstep && svr2011::InMatch() ? 0 : g_world_ticks);
   g_world_passes = passes;
   for (int i = 0; i < passes; ++i) {
     g_dbg_pass_now = 10 + i;
