@@ -36,6 +36,7 @@
 #include <rex/ppc.h>
 
 #include "match_box.h"
+#include "replays.h"
 
 #include "generated/default/svr2011_init.h"
 #include "thread_cpu.h"
@@ -76,6 +77,86 @@ REX_HOOK_RAW(sub_8217AC50) {
     }
   }
   __imp__sub_8217AC50(ctx, base);
+}
+
+namespace svr2011 {
+
+bool ReplayClipsClearNow(uint8_t* base, const char* why) {
+  const uint32_t recorder = Rd32(base + 0x82DEA30C);
+  if (!recorder) return false;
+  const uint32_t part = Rd32(base + recorder + 156);
+  if (!part) return false;
+  const uint32_t idx = Rd32(base + part + 1496);
+  if (idx > 3) return false;
+  const uint64_t buffer = uint64_t(part) + uint64_t(idx) * 748;
+  if (buffer < 0x10000 || buffer + 140 * 4 > 0xE0000000ull) return false;
+  int nonnull = 0;
+  for (int i = 0; i < 140; ++i) {
+    if (Rd32(base + uint32_t(buffer) + i * 4)) ++nonnull;
+    Wr32(base + uint32_t(buffer) + i * 4, 0);
+  }
+  REXLOG_WARN("[svr2011] replay: cleared the recorder's clip buffer ({}, {} pointers, clock {})", why, nonnull,
+              Rd32(base + 0x82E3CD0C));
+  return true;
+}
+
+void ReplayClipsClearIfNeeded(uint8_t* base) {
+  if (REXCVAR_GET(replays)) return;  // (the recorder's own callback clears it)
+  static uint32_t last_clock = 0;
+  static bool cleared = false;
+  const uint32_t clock = Rd32(base + 0x82E3CD0C);
+  if (clock < last_clock) cleared = false;  // (a new match)
+  last_clock = clock;
+  if (cleared) return;
+  if (ReplayClipsClearNow(base, "replays off")) cleared = true;
+}
+
+}  // namespace svr2011
+
+// The recorder's free of its 140 clip pointers (sub_821A0AA8(part +
+// [part+1496]*748), from sub_821DA450 or the first recording callback). With
+// replays off the first callback never runs, so the half-made clip the attract
+// demo left is still in the array when a scene change (the RTWM ring entrance)
+// frees the recorder - its destructor read guest 0xDC. Zero the pointers first:
+// the old clips leak, as they do with the match-start clear with replays on,
+// and the free loop skips them.
+REX_EXTERN(__imp__sub_821A0AA8);
+REX_HOOK_RAW(sub_821A0AA8) {
+  if (!REXCVAR_GET(replays)) {
+    const uint32_t buffer = ctx.r3.u32;
+    if (buffer >= 0x10000 && uint64_t(buffer) + 140 * 4 <= 0xE0000000ull) {
+      int nonnull = 0;
+      for (int i = 0; i < 140; ++i) {
+        if (Rd32(base + buffer + i * 4)) ++nonnull;
+        Wr32(base + buffer + i * 4, 0);
+      }
+      if (nonnull)
+        REXLOG_WARN("[svr2011] replay: cleared {} clip pointers before the recorder freed them (replays off)", nonnull);
+    }
+  }
+  __imp__sub_821A0AA8(ctx, base);
+}
+
+// Diagnostic for the RTWM entrance crash (guest 0xDC): the deleting destructor
+// of the class whose clip was half-made. Log the first few objects with a
+// second child, so a report names the child's vtable if the clear above missed
+// it. No writes: the game's own destructor still runs.
+REX_EXTERN(__imp__sub_8224E7A8);
+REX_HOOK_RAW(sub_8224E7A8) {
+  const uint32_t obj = ctx.r3.u32;
+  static int logged = 0;
+  if (logged < 8 && obj >= 0x10000 && obj < 0xE0000000u) {
+    const uint32_t child = Rd32(base + obj + 32);
+    if (child) {
+      ++logged;
+      if (child >= 0x10000 && child < 0xE0000000u)
+        REXLOG_INFO("[svr2011] replay: delete object {:08X} (vtable {:08X}) child2 {:08X} vtable {:08X}", obj, Rd32(base + obj),
+                    child, Rd32(base + child));
+      else
+        REXLOG_INFO("[svr2011] replay: delete object {:08X} (vtable {:08X}) child2 {:08X}", obj, Rd32(base + obj), child);
+    }
+  }
+  __imp__sub_8224E7A8(ctx, base);
 }
 
 REX_EXTERN(__imp__sub_8230C2D0);

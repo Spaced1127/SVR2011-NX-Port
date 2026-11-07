@@ -82,6 +82,7 @@ REXCVAR_DEFINE_BOOL(svr2011_watchdog_dump, true, "Debug",
 #include "online_overlay.h"
 #include "online_rules.h"
 #include "players.h"
+#include "replays.h"
 #include "android_perf.h"
 #include "mem_trace.h"
 #include "superstar_mods.h"
@@ -580,6 +581,7 @@ REX_HOOK_RAW(sub_8269D768) {
   svr2011::MatchTypesUpdate(ctx, base);  // (match_types.h: the lumberjacks, Slobber Knocker)
   svr2011::HctpRoomUpdate(ctx, base);    // (match_types.h: an HCTP backstage room's gimmicks)
   svr2011::JukeboxUpdate(ctx, base);     // (jukebox.h: a song stopped, skipped or previewed)
+  svr2011::ReplayClipsClearIfNeeded(base);  // (replays off: the attract demo's half-made clip)
   // An armed match start (ArmMatchStart): once the match's frame count has
   // gone up 30 updates running.
   static uint32_t last_frames = 0;

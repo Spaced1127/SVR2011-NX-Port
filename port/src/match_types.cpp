@@ -37,6 +37,7 @@
 #include <string>
 #include <vector>
 
+#include <rex/cvar.h>
 #include <rex/filesystem.h>
 #include <rex/hook.h>
 #include <rex/logging.h>
@@ -54,7 +55,10 @@
 #include "crowd_fight.h"
 #include "match_box.h"
 #include "match_record.h"
+#include "replays.h"
 #include "thread_cpu.h"
+
+REXCVAR_DECLARE(bool, replays);  // (replays.cpp)
 
 namespace svr2011 {
 std::atomic<uint32_t> g_match_rule{~0u}, g_match_arena{~0u};  // (the last match placed: LastMatch)
@@ -1957,6 +1961,7 @@ void LogMatch(PPCContext& ctx, uint8_t* base, uint32_t rule) {
                           info ? base[info + 13] : 255);
   }
   ctx = saved;
+  if (!REXCVAR_GET(replays)) svr2011::ReplayClipsClearNow(base, "a match is placed");
   std::string line = fmt::format("rule {:02X}, arena {} - {}", rule, Rd32(base + kLive + 64), people);
   svr2011::g_match_rule = rule, svr2011::g_match_arena = Rd32(base + kLive + 64);
   static std::string last;  // (placed three times as a match loads: logged once)
