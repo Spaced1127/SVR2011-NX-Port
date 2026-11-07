@@ -34,6 +34,10 @@
 #include <spdlog/sinks/stdout_sinks.h>
 #endif
 
+#if REX_PLATFORM_SWITCH
+#include <switch.h>
+#endif
+
 REXCVAR_DEFINE_STRING(log_level, "info", "Log",
                       "Global log level: trace, debug, info, warn, error, critical, off")
     .allowed({"trace", "debug", "info", "warn", "error", "critical", "off"});
@@ -66,7 +70,7 @@ REXCVAR_DEFINE_INT32(log_max_files, 20, "Log", "Max number of rotated log files 
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
 /*
- * log_async: write the log from a separate thread. Off by default: it made stutter much worse.
+ * log_async: write the log from a separate thread. Off on PC, on on Switch.
  *
  * The log itself is a source of stutter. The periodic report writes ~250 long lines every 10 seconds
  * from the ring thread, the one that feeds the GPU. With the synchronous logger, that thread formats
@@ -76,34 +80,33 @@ REXCVAR_DEFINE_INT32(log_max_files, 20, "Log", "Max number of rotated log files 
  * session are self-inflicted.
  *
  * With log_async, the logging thread only enqueues: pattern formatting and the trip to the SD are
- * done by a separate spdlog thread. The queue holds 8,192 messages (log_async_cola) and the policy is
- * to block when it is full.
+ * done by a separate spdlog thread. The queue holds 8,192 messages (log_async_cola).
  *
  * ================================================================================================
- *  With log_async on, the console did much worse. Do not turn it on as it is.
+ *  The first async attempt made the console much worse: 953 stutters against 226 with the
+ *  synchronous logger, whole stretches with 0 % of the frames under 33.3 ms, frames of 1,050 ms,
+ *  and an unplayable stretch. The telltale sign was CPU usage dropping while FPS sank and stutters
+ *  with `GPU 0.0 reales, grabar 0.4`: a blocked thread, not work.
  *
- *  953 stutters against 226 with the synchronous logger, whole stretches with 0 % of the frames
- *  under 33.3 ms, frames of 1,050 ms, and an unplayable stretch.
- *
- *  The telltale sign is that CPU usage drops while FPS sinks:
- *      CPU total   266 %  ->  179-233 %
- *      ring       75.7 %  ->  50-72 %
- *      game       68.9 %  ->  25-48 %
- *  and the stutters come with `GPU 0.0 reales, grabar 0.4`: a whole second of frame with nobody
- *  working. That is a blocked thread, not work.
- *
- *  Two design mistakes:
- *   1. `async_overflow_policy::block` blocks the writing thread when the queue fills up. The
- *      writer is the ring thread, the one that feeds the GPU.
- *   2. The spdlog pool thread inherits the priority of the thread that creates it, and on Horizon
+ *  Two design mistakes, both fixed in the Switch default below:
+ *   1. `async_overflow_policy::block` blocked the writing thread when the queue filled up. The
+ *      writer was the ring thread, the one that feeds the GPU. Now `overrun_oldest`: the game
+ *      thread never waits, and a stalled SD write only drops the oldest log lines.
+ *   2. The spdlog pool thread inherited the priority of the thread that created it, and on Horizon
  *      only priority 0x3B is time-sliced: with 3 cores busy with audio (0x2B), presentation
- *      (0x2C) and the ring (0x2D), that thread may almost never run. Queue full -> every REXLOG
- *      call blocks. See docs/platform-notes.md (Threads).
+ *      (0x2C) and the ring (0x2D), that thread may almost never run. The pool thread now sets
+ *      itself to 0x3B. See docs/platform-notes.md (Threads).
  * ================================================================================================
  */
-REXCVAR_DEFINE_BOOL(log_async, false, "Log",
-                    "Escribir el log desde un hilo aparte (el hilo que llama solo encola). Quita los "
-                    "tirones del volcado periodico; false pierde los ultimos mensajes si hay cuelgue")
+#if REX_PLATFORM_SWITCH
+constexpr bool kAsyncLogDefault = true;
+#else
+constexpr bool kAsyncLogDefault = false;
+#endif
+REXCVAR_DEFINE_BOOL(log_async, kAsyncLogDefault, "Log",
+                    "Escribir el log desde un hilo aparte (el hilo que llama solo encola; la cola suelta "
+                    "el mensaje mas viejo si se llena). En Switch encendido: un fallo de la SD no puede "
+                    "bloquear al juego")
     .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
 REXCVAR_DEFINE_INT32(log_async_cola, 8192, "Log", "Mensajes que caben en la cola del log asincrono")
@@ -196,7 +199,7 @@ std::shared_ptr<spdlog::logger> CreateCategoryLogger(const std::string& name) {
     // The logging thread only enqueues; formatting and writing are done by the spdlog thread.
     logger = std::make_shared<spdlog::async_logger>(name, sinks.begin(), sinks.end(),
                                                     spdlog::thread_pool(),
-                                                    spdlog::async_overflow_policy::block);
+                                                    spdlog::async_overflow_policy::overrun_oldest);
   } else {
     logger = std::make_shared<spdlog::logger>(name, sinks.begin(), sinks.end());
   }
@@ -304,7 +307,14 @@ void InitLogging(const LogConfig& config) {
   // The spdlog pool, before the loggers are rebuilt (see log_async). A single thread: log lines have to
   // keep their usual order.
   if (REXCVAR_GET(log_async) && !g_async_listo) {
-    spdlog::init_thread_pool(static_cast<size_t>(REXCVAR_GET(log_async_cola)), 1);
+    spdlog::init_thread_pool(static_cast<size_t>(REXCVAR_GET(log_async_cola)), 1,
+                             [] {
+#if REX_PLATFORM_SWITCH
+                               // Horizon only time-slices 0x3B: from the creating
+                               // thread it would inherit, say, 0x2C and starve.
+                               svcSetThreadPriority(CUR_THREAD_HANDLE, 0x3B);
+#endif
+                             });
     g_async_listo = true;
   }
 
@@ -327,6 +337,9 @@ void InitLogging(const LogConfig& config) {
     }
   }
   g_initialized = true;
+
+  spdlog::info("log: async writer {} (queue {})", g_async_listo ? "on, overrun oldest" : "off (synchronous)",
+               REXCVAR_GET(log_async_cola));
 
   // Periodic flush
   int flush_interval = REXCVAR_GET(log_flush_interval);
