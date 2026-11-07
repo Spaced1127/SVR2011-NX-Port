@@ -21,6 +21,7 @@
 #include <mutex>
 #include <new>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -739,6 +740,18 @@ bool HostPathFile::RellenarVentana(size_t byte_offset, size_t pedido, std::span<
  * It must return exactly the same as a single pread in every case the game can see: success with
  * whatever count results, and X_STATUS_END_OF_FILE only if the first call really fails.
  */
+static bool ReadWithRetry(FileHandle* fh, size_t offset, uint8_t* data, size_t size, size_t* out_bytes_read) {
+  // A read error on the SD can be transient (the card's controller retries
+  // internally; a busy card returns EIO). The game's loader treats a failed
+  // read as an empty buffer and can crash on it, so try again before giving
+  // up. A real EOF is a successful read of 0 bytes and never reaches this.
+  for (int attempt = 0; attempt < 3; ++attempt) {
+    if (fh->Read(offset, data, size, out_bytes_read)) return true;
+    if (attempt < 2) std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  return false;
+}
+
 X_STATUS HostPathFile::LeerDirecta(std::span<uint8_t> buffer, size_t byte_offset,
                                    size_t* out_bytes_read) {
   const size_t pedido = buffer.size();
@@ -746,7 +759,7 @@ X_STATUS HostPathFile::LeerDirecta(std::span<uint8_t> buffer, size_t byte_offset
   const size_t trozo = trozo_mb > 0 ? static_cast<size_t>(trozo_mb) * 1024u * 1024u : 0;
 
   if (!trozo || pedido <= trozo) {
-    if (file_handle_->Read(byte_offset, buffer.data(), pedido, out_bytes_read)) {
+    if (ReadWithRetry(file_handle_.get(), byte_offset, buffer.data(), pedido, out_bytes_read)) {
       return X_STATUS_SUCCESS;
     }
     *out_bytes_read = 0;
@@ -757,7 +770,7 @@ X_STATUS HostPathFile::LeerDirecta(std::span<uint8_t> buffer, size_t byte_offset
   while (total < pedido) {
     const size_t n = std::min(trozo, pedido - total);
     size_t leidos = 0;
-    if (!file_handle_->Read(byte_offset + total, buffer.data() + total, n, &leidos)) {
+    if (!ReadWithRetry(file_handle_.get(), byte_offset + total, buffer.data() + total, n, &leidos)) {
       // Real error. If there were already good bytes they are delivered; if not, it is the usual failure.
       if (total == 0) {
         *out_bytes_read = 0;

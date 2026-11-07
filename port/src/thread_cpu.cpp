@@ -434,7 +434,25 @@ REX_HOOK_RAW(sub_8290CCF8) {
                 path.empty() ? fmt::format("handle {:08X}", handle) : path, file_size, offset, size,
                 rex::system::XThread::GetLastError());
   if (done == kItemDone && overlapped)
-    if (const uint32_t out = GuestU32(base, overlapped + 16)) std::memset(base + out, 0, 4);
+    if (const uint32_t out = GuestU32(base, overlapped + 16)) {
+      // The count pointer comes from the game's overlapped structure. A failed
+      // read can leave it stale or garbage; writing through it faulted at the
+      // RTWM transition (the warning above was the last log line). Only clear
+      // it when it is a writable guest pointer.
+      auto* kernel = REX_KERNEL_STATE();
+      auto* memory = kernel ? kernel->memory() : nullptr;
+      auto* heap = memory ? memory->LookupHeap(out) : nullptr;
+      const auto access = heap ? heap->QueryRangeAccess(out, out + 3) : rex::memory::PageAccess::kNoAccess;
+      const bool writable = access == rex::memory::PageAccess::kReadWrite ||
+                            access == rex::memory::PageAccess::kExecuteReadWrite;
+      if (writable) {
+        std::memset(base + out, 0, 4);
+      } else {
+        static std::atomic<int> told_bad{0};
+        if (told_bad++ < 8)
+          REXLOG_WARN("load: the failed read's count pointer {:08X} is not writable - not cleared", out);
+      }
+    }
   t_read_failed = true;
 }
 
